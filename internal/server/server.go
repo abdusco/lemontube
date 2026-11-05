@@ -5,13 +5,41 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"lemontube/internal"
 )
 
-func New(assets fs.FS, service *internal.Service) *echo.Echo {
+func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	e := echo.New()
+	auth := &authentication{users: users, sessions: make(map[string]time.Time)}
+	e.Use(auth.middleware)
+	e.GET("/login", func(c echo.Context) error {
+		if len(users) == 0 || auth.authenticated(c.Request()) {
+			return c.Redirect(http.StatusSeeOther, "/")
+		}
+		page, err := fs.ReadFile(assets, "login.html")
+		if err != nil {
+			return err
+		}
+		c.Response().Header().Set("Cache-Control", "no-store")
+		return c.HTMLBlob(http.StatusOK, page)
+	})
+	e.POST("/login", auth.login)
+	e.POST("/logout", func(c echo.Context) error {
+		if cookie, err := c.Cookie(sessionCookie); err == nil {
+			auth.mutex.Lock()
+			delete(auth.sessions, cookie.Value)
+			auth.mutex.Unlock()
+		}
+		c.SetCookie(&http.Cookie{Name: sessionCookie, Path: "/", HttpOnly: true, Secure: secureRequest(c.Request()), SameSite: http.SameSiteStrictMode, MaxAge: -1})
+		return c.Redirect(http.StatusSeeOther, "/login")
+	})
+	e.GET("/api/session", func(c echo.Context) error {
+		c.Response().Header().Set("Cache-Control", "no-store")
+		return c.JSON(http.StatusOK, map[string]bool{"auth_enabled": len(users) > 0})
+	})
 	e.POST("/api/orphan-outputs/clear", func(c echo.Context) error {
 		cleared, retained, err := service.ClearOrphanOutputs(c.Request().Context())
 		if err != nil {

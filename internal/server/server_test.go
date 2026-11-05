@@ -16,6 +16,10 @@ import (
 )
 
 func newTestServer(t *testing.T) http.Handler {
+	return newTestServerWithUsers(t, nil)
+}
+
+func newTestServerWithUsers(t *testing.T, users []AuthUser) http.Handler {
 	t.Helper()
 	dir := t.TempDir()
 	repo, err := internal.OpenRepository(filepath.Join(dir, "state.sqlite3"))
@@ -30,8 +34,9 @@ func newTestServer(t *testing.T) http.Handler {
 	require.NoError(t, err)
 	assets := fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("LemonTube")},
+		"login.html": &fstest.MapFile{Data: []byte("Sign in")},
 	}
-	return New(assets, service)
+	return New(assets, service, users)
 }
 
 func TestHTTPAPI(t *testing.T) {

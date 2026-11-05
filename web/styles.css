@@ -34,6 +34,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+[x-cloak], [hidden] { display: none !important; }
 body { margin: 0; background: var(--background); color: var(--ink); }
 button, input, select { font: inherit; }
 button, select { cursor: pointer; }
@@ -60,6 +61,12 @@ a { color: inherit; }
 main { max-width: 59rem; margin-inline: auto; padding-block: 2.5rem 4rem; }
 h1, h2, h3, p { margin-top: 0; }
 .card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.login-page { max-width: 27rem; padding: 4rem 1rem; }
+.login-page > .brand { margin-bottom: 1.5rem; }
+.login-card { display: grid; gap: 1rem; padding: 1.5rem; }
+.login-card > p { margin: 0; color: var(--muted); font-size: .85rem; }
+.login-card > .error { color: var(--danger); }
+.login-card .primary-button { margin-top: .3rem; }
 .download-card { padding: clamp(1.25rem, 3vw, 2rem); }
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .form-heading { margin-bottom: 1.5rem; }

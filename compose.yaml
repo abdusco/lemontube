@@ -9,4 +9,5 @@ services:
     environment:
       STATE_DIR: /data
       DOWNLOAD_DIR: /downloads
+      AUTH_USERS:
     restart: unless-stopped

@@ -11,6 +11,10 @@
  */
 async function api(path, options) {
   const response = await fetch(path, options);
+  if (response.status === 401) {
+    window.location.assign('/login');
+    throw new Error('Your session has expired.');
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.message || `Request failed (${response.status})`);
@@ -41,6 +45,7 @@ function app() {
     updatingYTDLP: false,
     clearingOrphans: false,
     orphanMessage: '',
+    authEnabled: false,
     /** @type {string|null} */
     openLogId: null,
     /** @type {string[]} */
@@ -54,7 +59,7 @@ function app() {
 
     /** Start polling when Alpine initializes the component. @returns {Promise<void>} */
     async init() {
-      await Promise.all([this.refresh(), this.refreshCookies(), this.refreshYTDLP()]);
+      await Promise.all([this.refresh(), this.refreshCookies(), this.refreshYTDLP(), this.refreshSession()]);
       this.timer = setInterval(() => {
         if (!document.hidden) this.refresh();
       }, 3000);
@@ -232,6 +237,15 @@ function app() {
         this.orphanMessage = error.message;
       } finally {
         this.clearingOrphans = false;
+      }
+    },
+
+    /** @returns {Promise<void>} */
+    async refreshSession() {
+      try {
+        this.authEnabled = (await api('/api/session')).auth_enabled;
+      } catch (error) {
+        this.error = error.message;
       }
     },
 

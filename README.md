@@ -34,7 +34,14 @@ docker compose up -d
 
 Open [localhost:8081](http://localhost:8081). Downloads are saved in `./downloads` and application data in `./data`, relative to the Compose file. Back up `./data` if you want to keep your download history and settings.
 
-LemonTube has no built-in authentication. If you make it accessible to others, put it behind an authenticated reverse proxy.
+By default, LemonTube has no login. To require one, set `AUTH_USERS` to a JSON array of `username:password` strings before starting it. For example:
+
+```sh
+export AUTH_USERS='["alice:replace-with-a-strong-password","bob:another-strong-password"]'
+docker compose up -d
+```
+
+Keep these credentials private: they are stored as plaintext in the environment. Use HTTPS through a reverse proxy when accessing LemonTube over a network, and restrict access to trusted users. Sign-in sessions expire after 24 hours or a server restart. If `AUTH_USERS` is unset, anyone who can reach LemonTube has access; an empty or invalid value prevents it from starting.
 
 ### Configuration
 
@@ -46,5 +53,6 @@ Set environment variables in the Compose file to change these defaults:
 | `DELETE_FILE_ON_TRASHCAN` | `false` | Delete unchanged files when removing a download |
 | `CLEAR_COMPLETED_AFTER` | `0` | Automatically remove finished downloads after this many seconds; `0` disables this |
 | `YTDLP_PATH` | unset | Use an externally managed yt-dlp executable instead of in-app updates |
+| `AUTH_USERS` | unset | JSON array of login credentials; unset disables login |
 
 Only one LemonTube instance should use the same data directory.

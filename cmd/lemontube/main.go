@@ -19,6 +19,14 @@ import (
 )
 
 func main() {
+	authUsers, configured := os.LookupEnv("AUTH_USERS")
+	if configured && authUsers == "" {
+		log.Fatal("AUTH_USERS must not be empty; unset it to disable authentication")
+	}
+	users, err := server.ParseAuthUsers(authUsers)
+	if err != nil {
+		log.Fatal(err)
+	}
 	stateDir := os.Getenv("STATE_DIR")
 	if stateDir == "" {
 		stateDir = "."
@@ -72,7 +80,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer service.Wait()
-	e := server.New(web.Assets(), service)
+	e := server.New(web.Assets(), service, users)
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
