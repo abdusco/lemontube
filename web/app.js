@@ -38,6 +38,8 @@ function app() {
     ytdlp: {version: '', source: '', can_update: false},
     ytdlpMessage: '',
     updatingYTDLP: false,
+    clearingOrphans: false,
+    orphanMessage: '',
     /** @type {string|null} */
     openLogId: null,
     /** @type {string[]} */
@@ -208,6 +210,22 @@ function app() {
         await this.refreshCookies();
       } catch (error) {
         this.error = error.message;
+      }
+    },
+
+    /** @returns {Promise<void>} */
+    async clearOrphans() {
+      if (!window.confirm('Delete unchanged files from removed downloads? This cannot be undone.')) return;
+      this.clearingOrphans = true;
+      this.orphanMessage = '';
+      try {
+        const result = await api('/api/orphan-outputs/clear', {method: 'POST'});
+        this.orphanMessage = `Cleared files for ${result.cleared} removed downloads.` +
+          (result.retained ? ` ${result.retained} could not be cleared; changed files are kept.` : '');
+      } catch (error) {
+        this.orphanMessage = error.message;
+      } finally {
+        this.clearingOrphans = false;
       }
     },
 

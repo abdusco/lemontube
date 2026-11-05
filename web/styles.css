@@ -41,6 +41,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 a { color: inherit; }
 .app-shell { max-width: 76rem; margin-inline: auto; padding-inline: clamp(1rem, 4vw, 3rem); }
 .topbar { min-height: 5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); }
+.menu-wrap { position: relative; }
+.menu-button { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; padding: .65rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); color: var(--ink); anchor-name: --settings-button; }
+.menu-button:hover { background: var(--surface-soft); }
+.menu-button svg { width: 100%; height: 100%; }
+.settings-menu { position: fixed; inset: 4.5rem 1rem auto auto; margin: 0; width: min(23rem, calc(100vw - 2rem)); max-height: calc(100vh - 5rem); overflow: auto; padding: 1.2rem; border: 1px solid var(--line); border-radius: .85rem; background: var(--surface); color: var(--ink); box-shadow: 0 12px 32px rgb(0 0 0 / 20%); }
+.settings-menu h2 { font-size: 1rem; }
+.menu-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.menu-section h3 { margin: 0 0 .4rem; font-size: .85rem; }
+.menu-section p { margin: 0 0 .7rem; color: var(--muted); font-size: .8rem; }
+.menu-section .cookie-status { margin: .7rem 0 0; }
+@supports (position-anchor: --settings-button) {
+  .settings-menu { position-anchor: --settings-button; top: calc(anchor(bottom) + .5rem); right: anchor(right); }
+}
 .brand { display: inline-flex; align-items: center; gap: .6rem; text-decoration: none; font-size: 1.15rem; font-weight: 800; letter-spacing: -.055em; }
 .brand-mark { display: grid; place-items: center; width: 2.1rem; aspect-ratio: 1; border-radius: .7rem; background: var(--accent); color: var(--accent-ink); font-size: 1.55rem; line-height: 1; }
 .brand-accent { color: var(--muted); }
