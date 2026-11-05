@@ -123,6 +123,14 @@ func (r *Repository) DeleteJob(ctx context.Context, id string) error {
 	return err
 }
 
+func (r *Repository) CompleteCleanup(ctx context.Context, id string) error {
+	q := r.db.Update("jobs").
+		Set(goqu.Record{"cleanup_complete": true, "cleanup_error": nil, "cleanup_after": nil}).
+		Where(goqu.C("id").Eq(id), goqu.C("delete_requested_at").IsNotNull())
+	_, err := q.Executor().ExecContext(ctx)
+	return err
+}
+
 func (r *Repository) RecordCleanupError(ctx context.Context, id string, cleanupErr error) error {
 	retryAt := time.Now().UTC().Add(time.Minute).Format("2006-01-02T15:04:05.000Z")
 	q := r.db.Update("jobs").

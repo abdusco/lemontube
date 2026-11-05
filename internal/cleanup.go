@@ -126,6 +126,8 @@ func (s *Service) publish(ctx context.Context, id, workspace string) error {
 }
 
 func (s *Service) sweep(ctx context.Context) error {
+	s.orphanMutex.Lock()
+	defer s.orphanMutex.Unlock()
 	jobs, err := s.repo.ListJobs(ctx, true)
 	if err != nil {
 		return err
@@ -135,6 +137,9 @@ func (s *Service) sweep(ctx context.Context) error {
 		known[job.ID] = true
 	}
 	for _, job := range jobs {
+		if job.CleanupComplete {
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -187,6 +192,12 @@ func (s *Service) sweep(ctx context.Context) error {
 				s.recordCleanupError(ctx, job.ID, err)
 				continue
 			}
+		}
+		if !job.DeleteOutputs && len(job.Outputs) > 0 {
+			if err := s.repo.CompleteCleanup(ctx, job.ID); err != nil {
+				return err
+			}
+			continue
 		}
 		if err := s.repo.DeleteJob(ctx, job.ID); err != nil {
 			return err
@@ -310,4 +321,34 @@ func (s *Service) deleteOutputs(outputs []OutputFile) error {
 		}
 	}
 	return nil
+}
+
+// ClearOrphanOutputs removes unchanged outputs whose jobs have been removed.
+// Files without a retained ownership record are never examined.
+func (s *Service) ClearOrphanOutputs(ctx context.Context) (int, int, error) {
+	if err := s.sweep(ctx); err != nil {
+		return 0, 0, err
+	}
+	s.orphanMutex.Lock()
+	defer s.orphanMutex.Unlock()
+	jobs, err := s.repo.ListJobs(ctx, true)
+	if err != nil {
+		return 0, 0, err
+	}
+	cleared, retained := 0, 0
+	for _, job := range jobs {
+		if job.DeleteRequestedAt == nil || !job.CleanupComplete {
+			continue
+		}
+		if err := s.deleteOutputs(job.Outputs); err != nil {
+			s.logger.Warn("orphan output retained", "job", job.ID, "error", err)
+			retained++
+			continue
+		}
+		if err := s.repo.DeleteJob(ctx, job.ID); err != nil {
+			return cleared, retained, err
+		}
+		cleared++
+	}
+	return cleared, retained, nil
 }

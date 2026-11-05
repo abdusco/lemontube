@@ -30,6 +30,8 @@ The image includes a uv-installed yt-dlp as its initial system copy. The **yt-dl
 
 Every download uses an isolated workspace. Temporary files are removed after the job and checked again on startup and periodically. Existing files in the download directory are never overwritten. When output deletion is enabled, LemonTube only removes recorded files whose contents still match the published output; changed files are retained for manual review.
 
+When a job is removed without deleting its files, LemonTube keeps a hidden record of its outputs. The settings menu can clear these files later if they are unchanged. Files from jobs removed before this tracking was introduced cannot be identified reliably and are left untouched.
+
 ## Development
 
 Install Go, yt-dlp, ffmpeg, and a supported JavaScript runtime for yt-dlp. Run `DEBUG=1 go run ./cmd/lemontube` and `go test ./...`. yt-dlp must be kept up to date as supported sites change.

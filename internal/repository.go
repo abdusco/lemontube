@@ -52,14 +52,23 @@ func (r *Repository) migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 1 {
-		return fmt.Errorf("database version %d is newer than supported version 1", version)
+	if version > 2 {
+		return fmt.Errorf("database version %d is newer than supported version 2", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schema); err != nil {
 			return fmt.Errorf("create schema: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
+			return err
+		}
+	}
+	if version < 2 {
+		// language=sql
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE jobs ADD COLUMN cleanup_complete BOOLEAN NOT NULL DEFAULT FALSE CHECK (cleanup_complete IN (FALSE, TRUE))`); err != nil {
+			return fmt.Errorf("add cleanup state: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 2"); err != nil {
 			return err
 		}
 	}
@@ -81,6 +90,7 @@ type jobRow struct {
 	DeleteOutputs     bool                  `db:"delete_outputs"`
 	CleanupError      *string               `db:"cleanup_error"`
 	CleanupAfter      *string               `db:"cleanup_after"`
+	CleanupComplete   bool                  `db:"cleanup_complete"`
 	CreatedAt         string                `db:"created_at"`
 	FinishedAt        *string               `db:"finished_at"`
 }
@@ -101,6 +111,7 @@ func (row jobRow) toDomain() Job {
 		DeleteOutputs:     row.DeleteOutputs,
 		CleanupError:      row.CleanupError,
 		CleanupAfter:      row.CleanupAfter,
+		CleanupComplete:   row.CleanupComplete,
 		CreatedAt:         row.CreatedAt,
 		FinishedAt:        row.FinishedAt,
 	}

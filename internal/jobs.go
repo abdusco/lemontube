@@ -30,14 +30,15 @@ type Config struct {
 }
 
 type Service struct {
-	repo    *Repository
-	config  Config
-	logger  *slog.Logger
-	mutex   sync.Mutex
-	running map[string]context.CancelFunc
-	wg      sync.WaitGroup
-	wake    chan struct{}
-	ytdlp   *ytdlp.Manager
+	repo        *Repository
+	config      Config
+	logger      *slog.Logger
+	mutex       sync.Mutex
+	orphanMutex sync.Mutex
+	running     map[string]context.CancelFunc
+	wg          sync.WaitGroup
+	wake        chan struct{}
+	ytdlp       *ytdlp.Manager
 }
 
 func NewService(repo *Repository, config Config, logger *slog.Logger) (*Service, error) {

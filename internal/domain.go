@@ -67,6 +67,7 @@ type Job struct {
 	Percent           *float64        `json:"percent"`
 	DeleteRequestedAt *string         `json:"-"`
 	DeleteOutputs     bool            `json:"-"`
+	CleanupComplete   bool            `json:"-"`
 	CleanupError      *string         `json:"cleanup_error,omitempty"`
 	CleanupAfter      *string         `json:"-"`
 	CreatedAt         string          `json:"created_at"`

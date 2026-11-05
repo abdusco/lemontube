@@ -12,6 +12,13 @@ import (
 
 func New(assets fs.FS, service *internal.Service) *echo.Echo {
 	e := echo.New()
+	e.POST("/api/orphan-outputs/clear", func(c echo.Context) error {
+		cleared, retained, err := service.ClearOrphanOutputs(c.Request().Context())
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]int{"cleared": cleared, "retained": retained})
+	})
 	e.GET("/health", func(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	})

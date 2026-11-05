@@ -77,6 +77,34 @@ func TestDeleteOutputsProtectsChangedFiles(t *testing.T) {
 	}
 }
 
+func TestClearOrphanOutputs(t *testing.T) {
+	s, repo := newTestService(t)
+	ctx := t.Context()
+	digest := sha256.Sum256([]byte("original"))
+	for _, item := range []struct{ id, name, content string }{
+		{"0123456789abcdef0123456789abcdef", "owned.mp4", "original"},
+		{"1123456789abcdef0123456789abcdef", "changed.mp4", "changed"},
+	} {
+		require.NoError(t, repo.CreateJob(ctx, Job{ID: item.id, URL: "https://example.com", Title: item.name, DownloadType: DownloadVideo}))
+		require.NoError(t, os.WriteFile(filepath.Join(s.config.DownloadDir, item.name), []byte(item.content), 0o600))
+		require.NoError(t, repo.SetOutputs(ctx, item.id, []OutputFile{{Path: item.name, Stage: ".lemontube-" + item.id + "-0", State: "published", SHA256: hex.EncodeToString(digest[:])}}))
+		_, err := repo.RequestDelete(ctx, item.id, false)
+		require.NoError(t, err)
+	}
+	unowned := filepath.Join(s.config.DownloadDir, "unowned.mp4")
+	require.NoError(t, os.WriteFile(unowned, []byte("original"), 0o600))
+	cleared, retained, err := s.ClearOrphanOutputs(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, cleared)
+	assert.Equal(t, 1, retained)
+	assert.NoFileExists(t, filepath.Join(s.config.DownloadDir, "owned.mp4"))
+	assert.FileExists(t, filepath.Join(s.config.DownloadDir, "changed.mp4"))
+	assert.FileExists(t, unowned)
+	jobs, err := repo.ListJobs(ctx, false)
+	require.NoError(t, err)
+	assert.Empty(t, jobs)
+}
+
 func TestReconcilePublishedHardLink(t *testing.T) {
 	s, repo := newTestService(t)
 	id := "0123456789abcdef0123456789abcdef"
