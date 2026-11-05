@@ -1,6 +1,6 @@
 services:
   lemontube:
-    build: .
+    image: ghcr.io/abdusco/lemontube:latest
     ports:
       - "8081:8081"
     volumes:

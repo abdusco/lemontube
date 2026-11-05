@@ -5,7 +5,7 @@ LemonTube is a self-hosted download queue powered by yt-dlp and ffmpeg. Add a vi
 yt-dlp embeds available metadata and chapters in downloaded audio and video using ffmpeg. Requested subtitles are saved separately; thumbnails are not embedded.
 
 ```sh
-docker compose up --build -d
+docker compose up -d
 ```
 
 Open http://localhost:8081. The Compose file stores state in `./data` and downloads in `./downloads`.
@@ -35,3 +35,5 @@ When a job is removed without deleting its files, LemonTube keeps a hidden recor
 ## Development
 
 Install Go, yt-dlp, ffmpeg, and a supported JavaScript runtime for yt-dlp. Run `DEBUG=1 go run ./cmd/lemontube` and `go test ./...`. yt-dlp must be kept up to date as supported sites change.
+
+Push a `v*` semantic version tag to publish a GitHub release and multi-platform container image. Stable releases are also tagged `latest`.
