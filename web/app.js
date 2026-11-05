@@ -145,8 +145,10 @@ function app() {
     /** @param {string} id @returns {Promise<void>} */
     async toggleLog(id) {
       this.openLogId = this.openLogId === id ? null : id;
-      this.logLines = [];
-      if (this.openLogId) await this.refresh();
+      if (this.openLogId) {
+        this.logLines = [];
+        await this.refresh();
+      }
     },
 
     /** @returns {Promise<void>} */

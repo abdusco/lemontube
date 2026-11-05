@@ -81,7 +81,7 @@
                   <button type="button" class="secondary" @click="deleteJob(job.id)" x-text="isActive(job) ? 'Cancel' : 'Remove'"></button>
                 </div>
               </div>
-              <pre x-show="openLogId === job.id" x-text="logLines.length ? logLines.join('\n') : 'No log messages.'"></pre>
+              <pre class="job-log" x-show="openLogId === job.id" x-text="logLines.length ? logLines.join('\n') : 'No log messages.'"></pre>
             </article>
           </template>
         </div>
