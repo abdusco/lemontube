@@ -88,7 +88,7 @@
       </section>
 
       <details class="cookie-card">
-        <summary><span class="cookie-icon" aria-hidden="true">◈</span><span><strong>Site cookies</strong><small>For downloads that need a login</small></span><span class="summary-arrow" aria-hidden="true">⌄</span></summary>
+        <summary><span class="cookie-icon" aria-hidden="true">◈</span><span><strong>Site cookies</strong><small>For downloads that need a login</small></span><svg class="summary-arrow" aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
         <div class="cookie-content">
           <p>Upload a Netscape <code>cookies.txt</code> file for sites that require a login. Cookies are stored in the database; protect it like a password.</p>
           <div class="cookie-drop" @dragover.prevent @drop.prevent="readCookieDrop($event)">

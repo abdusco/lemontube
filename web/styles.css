@@ -126,6 +126,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 @starting-style { .job { opacity: 0; transform: translateY(.35rem); } }
 .cookie-card { margin-top: 2rem; border: 1px solid var(--line); border-radius: .85rem; background: var(--surface); }.cookie-card summary { display: flex; align-items: center; gap: .8rem; padding: 1rem 1.15rem; cursor: pointer; list-style: none; }.cookie-card summary::-webkit-details-marker { display: none; }.cookie-icon { display: grid; place-items: center; flex: none; width: 2.4rem; height: 2.4rem; border-radius: .7rem; background: var(--surface-soft); font-size: 1.25rem; }.cookie-card summary strong, .cookie-card summary small { display: block; }.cookie-card summary strong { font-size: .85rem; }.cookie-card summary small { margin-top: .1rem; color: var(--muted); font-size: .75rem; }.summary-arrow { margin-left: auto; color: var(--muted); transition: rotate .2s; }.cookie-card[open] .summary-arrow { rotate: 180deg; }.cookie-content { padding: 0 1.15rem 1.15rem; color: var(--muted); font-size: .84rem; }.cookie-content > p { max-width: 40rem; }.cookie-content input[type="file"] { height: auto; min-height: 3rem; padding: .6rem; }.cookie-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }.cookie-status { margin: .7rem 0 0; font-size: .78rem; }
 .cookie-text { margin-top: 1rem; }
+.summary-arrow { flex: none; width: 1rem; height: 1rem; }
+.cookie-status:empty { display: none; }
 @supports (interpolate-size: allow-keywords) and (transition-behavior: allow-discrete) {
   .job-log {
     interpolate-size: allow-keywords;
