@@ -1,0 +1,12 @@
+services:
+  lemontube:
+    build: .
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./data:/data
+      - ./downloads:/downloads
+    environment:
+      STATE_DIR: /data
+      DOWNLOAD_DIR: /downloads
+    restart: unless-stopped

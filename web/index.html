@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f2">
+  <title>LemonTube</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='20' fill='%23d6ed77'/%3E%3Ctext x='32' y='48' text-anchor='middle' font-size='44' fill='%23263b18'%3E✳%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css?v=2">
+  <script src="/app.js?v=2" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.15.8/dist/cdn.min.js" defer></script>
+</head>
+<body x-data="app()">
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="LemonTube home">
+        <span class="brand-mark" aria-hidden="true">✳</span>
+        <span>Lemon<span class="brand-accent">Tube</span></span>
+      </a>
+    </header>
+
+    <main>
+      <form id="download-form" class="card download-card" @submit.prevent="addDownload">
+        <div class="section-heading form-heading">
+          <h1>Add download</h1>
+        </div>
+        <label class="field url-field">
+          <span>Video or playlist URL</span>
+          <span class="url-control"><span class="link-icon" aria-hidden="true">↗</span><input name="url" type="url" x-model="url" required placeholder="Paste a link here…" autocomplete="url"></span>
+        </label>
+        <div class="fields">
+          <label class="field"><span>Media type</span><select name="download_type" x-model="downloadType" @change="format = downloadType === 'audio' ? 'mp3' : 'mp4'"><option value="video">Video</option><option value="audio">Audio</option></select></label>
+          <label class="field"><span>Format</span><select name="format" x-model="format"><template x-for="item in formats" :key="item.value"><option :value="item.value" x-text="item.label"></option></template></select></label>
+          <label class="field"><span>Quality</span><select name="quality" x-model="quality"><option value="best">Best available</option><option value="2160">2160p</option><option value="1440">1440p</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label>
+          <div class="field"><span class="label-with-help"><label for="subtitle-langs">Subtitles</label> <span class="help-wrap"><button type="button" class="help-button" aria-label="Subtitle language help" aria-describedby="subtitle-help">?</button><span id="subtitle-help" class="tooltip" role="tooltip">Enter language codes separated by commas, like en, tr, or de.</span></span></span><input id="subtitle-langs" name="subtitle_langs" x-model="subtitleLangs" placeholder="e.g. en, tr" autocomplete="off"></div>
+        </div>
+        <div class="form-footer">
+          <button type="submit" class="primary-button" :disabled="adding"><span aria-hidden="true">↓</span> <span x-text="adding ? 'Adding…' : 'Add download'"></span></button>
+        </div>
+        <p id="error" class="error" role="alert" x-text="error"></p>
+      </form>
+
+      <section class="downloads-section" aria-labelledby="downloads-title">
+        <div class="section-heading">
+          <h2 id="downloads-title">Downloads <span id="job-count" class="count" aria-label="Number of downloads" x-text="jobs.length">0</span></h2>
+        </div>
+        <div id="jobs" aria-live="polite" aria-relevant="additions text">
+          <div class="empty-state" x-show="jobs.length === 0"><p>No downloads yet.</p></div>
+          <template x-for="job in jobs" :key="job.id">
+            <article class="job">
+              <div class="job-layout">
+                <span class="job-icon" aria-hidden="true" x-text="job.download_type === 'audio' ? '♫' : '▶'"></span>
+                <div class="job-body">
+                  <div class="job-heading"><h3 x-text="job.title"></h3><span class="job-status" :data-status="job.status" x-text="jobStatus(job)"></span></div>
+                  <p class="job-error" x-show="job.error" x-text="job.error"></p>
+                  <div class="job-progress" x-show="job.status === 'running' && job.percent != null" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(job.percent || 0)"><span :style="'width: ' + Math.max(0, Math.min(100, job.percent || 0)) + '%'"></span></div>
+                  <div class="job-files"><template x-for="output in publishedOutputs(job)" :key="output.path"><a :href="'/download/' + encodeURIComponent(output.path)"><span aria-hidden="true">↓</span><span x-text="output.path"></span></a></template></div>
+                </div>
+                <div class="job-actions">
+                  <button type="button" class="secondary" @click="toggleLog(job.id)" :aria-expanded="openLogId === job.id" x-text="openLogId === job.id ? 'Hide log' : 'Log'"></button>
+                  <button type="button" class="secondary" x-show="job.status === 'failed' || job.status === 'canceled'" @click="retryJob(job.id)">Retry</button>
+                  <button type="button" class="secondary" @click="deleteJob(job.id)" x-text="isActive(job) ? 'Cancel' : 'Remove'"></button>
+                </div>
+              </div>
+              <pre x-show="openLogId === job.id" x-text="logLines.length ? logLines.join('\n') : 'No log messages.'"></pre>
+            </article>
+          </template>
+        </div>
+      </section>
+
+      <details class="cookie-card">
+        <summary><span class="cookie-icon" aria-hidden="true">◈</span><span><strong>Site cookies</strong><small>For downloads that need a login</small></span><span class="summary-arrow" aria-hidden="true">⌄</span></summary>
+        <div class="cookie-content">
+          <p>Upload a Netscape <code>cookies.txt</code> file for sites that require a login. Cookies are stored in the database; protect it like a password.</p>
+          <div class="cookie-drop" @dragover.prevent @drop.prevent="readCookieDrop($event)">
+            <label class="dropzone" for="cookie-file" :class="{ 'is-dragging': cookieDragging }" @dragenter.prevent="cookieDragging = true" @dragleave="if (!$el.contains($event.relatedTarget)) cookieDragging = false">
+              <input id="cookie-file" x-ref="cookieFile" class="dropzone-input" type="file" accept=".txt,text/plain" @change="readCookieFile($event.target.files[0])">
+              <span class="dropzone-icon" aria-hidden="true">↑</span>
+              <span class="dropzone-title">Drop cookies.txt here or <span class="dropzone-link">choose a file</span></span>
+              <span class="dropzone-detail" x-text="cookieFileName || 'Text files up to 1 MB'">Text files up to 1 MB</span>
+            </label>
+            <label class="field cookie-text" for="cookie-text"><span>Cookie file contents</span><textarea id="cookie-text" x-model="cookieText" @paste="readCookiePaste($event)" placeholder="Paste cookie text here, or drop a cookies.txt file"></textarea></label>
+            <p class="cookie-hint">Select, paste or drop a file, or paste its contents directly.</p>
+          </div>
+          <div class="cookie-actions"><button id="upload-cookies" type="button" class="secondary" @click="uploadCookies">Save cookies</button><button id="clear-cookies" type="button" class="text-button" @click="clearCookies">Delete all</button></div>
+          <p id="cookie-status" class="cookie-status" aria-live="polite" x-text="cookieDomains.length ? 'Saved domains: ' + cookieDomains.join(', ') : 'No cookies saved.'"></p>
+        </div>
+      </details>
+      <details class="cookie-card">
+        <summary><span class="cookie-icon" aria-hidden="true">↓</span><span><strong>yt-dlp</strong><small>Version and updates</small></span><span class="summary-arrow" aria-hidden="true">⌄</span></summary>
+        <div class="cookie-content">
+          <p x-text="ytdlp.version ? 'Version ' + ytdlp.version + ' · ' + ytdlp.source : 'Version unavailable'"></p>
+          <p>Manual updates install the latest nightly build. Running downloads are not interrupted.</p>
+          <button type="button" class="secondary" @click="updateYTDLP" :disabled="updatingYTDLP || !ytdlp.can_update" x-text="updatingYTDLP ? 'Updating…' : 'Update yt-dlp'"></button>
+          <p class="cookie-status" x-text="ytdlpMessage || (ytdlp.can_update ? '' : 'YTDLP_PATH is externally managed.')" aria-live="polite"></p>
+        </div>
+      </details>
+    </main>
+  </div>
+</body>
+</html>
