@@ -35,6 +35,7 @@ function app() {
     cookieText: '',
     cookieFileName: '',
     cookieDragging: false,
+    cookieMessage: '',
     ytdlp: {version: '', source: '', can_update: false},
     ytdlpMessage: '',
     updatingYTDLP: false,
@@ -200,16 +201,19 @@ function app() {
         this.cookieFileName = '';
         this.$refs.cookieFile.value = '';
         await this.refreshCookies();
+        this.cookieMessage = 'Cookies saved.';
       } catch (error) {
         this.error = error.message;
       }
     },
 
-    /** @returns {Promise<void>} */
-    async clearCookies() {
+    /** @param {string} [domain] @returns {Promise<void>} */
+    async clearCookies(domain) {
+      if (!domain && !window.confirm('Delete cookies for all saved domains?')) return;
       try {
-        await api('/api/cookies', {method: 'DELETE'});
+        await api(domain ? '/api/cookies/' + encodeURIComponent(domain) : '/api/cookies', {method: 'DELETE'});
         await this.refreshCookies();
+        this.cookieMessage = domain ? `Cookies removed for ${domain}.` : 'All cookies removed.';
       } catch (error) {
         this.error = error.message;
       }

@@ -99,3 +99,22 @@ func TestHTTPAPI(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteCookiesForOneDomain(t *testing.T) {
+	server := newTestServer(t)
+	content := ".example.com\tTRUE\t/\tTRUE\t0\tsession\tsecret\n" +
+		".other.example\tTRUE\t/\tFALSE\t0\tkey\tvalue\n"
+
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/cookies", strings.NewReader(content)))
+	require.Equal(t, http.StatusNoContent, response.Code)
+
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/cookies/.example.com", nil))
+	require.Equal(t, http.StatusNoContent, response.Code)
+
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/cookies", nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.JSONEq(t, `[".other.example"]`, response.Body.String())
+}

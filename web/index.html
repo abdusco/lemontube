@@ -90,7 +90,20 @@
       <details class="cookie-card">
         <summary><span class="cookie-icon" aria-hidden="true">◈</span><span><strong>Site cookies</strong><small>For downloads that need a login</small></span><svg class="summary-arrow" aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
         <div class="cookie-content">
-          <p>Upload a Netscape <code>cookies.txt</code> file for sites that require a login. Cookies are stored in the database; protect it like a password.</p>
+          <p>Upload a Netscape <code>cookies.txt</code> file for sites that require a login. You can export one with <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer">Get cookies.txt LOCALLY for Chrome</a>. Cookies are stored in the database; protect it like a password.</p>
+          <section class="cookie-saved" aria-labelledby="cookie-saved-heading">
+            <div class="cookie-saved-heading">
+              <div><h3 id="cookie-saved-heading">Saved domains</h3><p>Remove cookies for a site without affecting other sites.</p></div>
+              <button id="clear-cookies" type="button" class="text-button cookie-delete-all" x-show="cookieDomains.length" @click="clearCookies()">Delete all</button>
+            </div>
+            <p class="cookie-empty" x-show="!cookieDomains.length">No cookies saved.</p>
+            <ul class="cookie-domains" x-show="cookieDomains.length">
+              <template x-for="domain in cookieDomains" :key="domain">
+                <li><span x-text="domain"></span><button type="button" class="text-button cookie-remove" @click="clearCookies(domain)" :aria-label="'Remove cookies for ' + domain">Remove</button></li>
+              </template>
+            </ul>
+          </section>
+          <div class="cookie-upload-heading"><h3>Add cookies</h3><p>Existing cookies for the same domains will be replaced.</p></div>
           <div class="cookie-drop" @dragover.prevent @drop.prevent="readCookieDrop($event)">
             <label class="dropzone" for="cookie-file" :class="{ 'is-dragging': cookieDragging }" @dragenter.prevent="cookieDragging = true" @dragleave="if (!$el.contains($event.relatedTarget)) cookieDragging = false">
               <input id="cookie-file" x-ref="cookieFile" class="dropzone-input" type="file" accept=".txt,text/plain" @change="readCookieFile($event.target.files[0])">
@@ -101,8 +114,8 @@
             <label class="field cookie-text" for="cookie-text"><span>Cookie file contents</span><textarea id="cookie-text" x-model="cookieText" @paste="readCookiePaste($event)" placeholder="Paste cookie text here, or drop a cookies.txt file"></textarea></label>
             <p class="cookie-hint">Select, paste or drop a file, or paste its contents directly.</p>
           </div>
-          <div class="cookie-actions"><button id="upload-cookies" type="button" class="secondary" @click="uploadCookies">Save cookies</button><button id="clear-cookies" type="button" class="text-button" @click="clearCookies">Delete all</button></div>
-          <p id="cookie-status" class="cookie-status" aria-live="polite" x-text="cookieDomains.length ? 'Saved domains: ' + cookieDomains.join(', ') : 'No cookies saved.'"></p>
+          <div class="cookie-actions"><button id="upload-cookies" type="button" class="secondary" @click="uploadCookies">Save cookies</button></div>
+          <p id="cookie-status" class="cookie-status" aria-live="polite" x-text="cookieMessage"></p>
         </div>
       </details>
     </main>
