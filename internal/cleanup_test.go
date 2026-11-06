@@ -26,7 +26,7 @@ func newTestService(t *testing.T) (*Service, *Repository) {
 func TestPublishAvoidsCollisionsAndTracksFiles(t *testing.T) {
 	s, repo := newTestService(t)
 	id := "0123456789abcdef0123456789abcdef"
-	require.NoError(t, repo.CreateJob(t.Context(), Job{ID: id, URL: "https://example.com", Title: "example", DownloadType: DownloadVideo}))
+	require.NoError(t, repo.CreateJob(t.Context(), Job{ID: JobID(id), URL: "https://example.com", Title: "example", DownloadType: DownloadVideo}))
 	workspace := filepath.Join(s.config.TempDir, ".lemontube", id)
 	require.NoError(t, os.Mkdir(workspace, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "video.mp4"), []byte("download"), 0o600))
@@ -85,7 +85,7 @@ func TestClearOrphanOutputs(t *testing.T) {
 		{"0123456789abcdef0123456789abcdef", "owned.mp4", "original"},
 		{"1123456789abcdef0123456789abcdef", "changed.mp4", "changed"},
 	} {
-		require.NoError(t, repo.CreateJob(ctx, Job{ID: item.id, URL: "https://example.com", Title: item.name, DownloadType: DownloadVideo}))
+		require.NoError(t, repo.CreateJob(ctx, Job{ID: JobID(item.id), URL: "https://example.com", Title: item.name, DownloadType: DownloadVideo}))
 		require.NoError(t, os.WriteFile(filepath.Join(s.config.DownloadDir, item.name), []byte(item.content), 0o600))
 		require.NoError(t, repo.SetOutputs(ctx, item.id, []OutputFile{{Path: item.name, Stage: ".lemontube-" + item.id + "-0", State: "published", SHA256: hex.EncodeToString(digest[:])}}))
 		_, err := repo.RequestDelete(ctx, item.id, false)
@@ -109,7 +109,7 @@ func TestReconcilePublishedHardLink(t *testing.T) {
 	s, repo := newTestService(t)
 	id := "0123456789abcdef0123456789abcdef"
 	stage := ".lemontube-" + id + "-0"
-	require.NoError(t, repo.CreateJob(t.Context(), Job{ID: id, URL: "https://example.com", Title: "example", DownloadType: DownloadVideo}))
+	require.NoError(t, repo.CreateJob(t.Context(), Job{ID: JobID(id), URL: "https://example.com", Title: "example", DownloadType: DownloadVideo}))
 	require.NoError(t, os.WriteFile(filepath.Join(s.config.DownloadDir, stage), []byte("download"), 0o600))
 	require.NoError(t, os.Link(filepath.Join(s.config.DownloadDir, stage), filepath.Join(s.config.DownloadDir, "video.mp4")))
 	outputs := []OutputFile{{Path: "video.mp4", Stage: stage, State: "publishing"}}
@@ -128,7 +128,7 @@ func TestSweepCleansInterruptedWorkspaceAndPreservesUnownedFiles(t *testing.T) {
 	s, repo := newTestService(t)
 	id := "0123456789abcdef0123456789abcdef"
 	require.NoError(t, repo.CreateJob(t.Context(), Job{
-		ID:           id,
+		ID:           JobID(id),
 		URL:          "https://example.com",
 		Title:        "example",
 		DownloadType: DownloadVideo,
@@ -172,7 +172,7 @@ func TestSweepRetainsFailedDeletionForRetry(t *testing.T) {
 	s, repo := newTestService(t)
 	id := "0123456789abcdef0123456789abcdef"
 	require.NoError(t, repo.CreateJob(t.Context(), Job{
-		ID:           id,
+		ID:           JobID(id),
 		URL:          "https://example.com",
 		Title:        "example",
 		DownloadType: DownloadVideo,

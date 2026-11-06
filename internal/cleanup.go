@@ -134,9 +134,10 @@ func (s *Service) sweep(ctx context.Context) error {
 	}
 	known := make(map[string]bool, len(jobs))
 	for _, job := range jobs {
-		known[job.ID] = true
+		known[string(job.ID)] = true
 	}
 	for _, job := range jobs {
+		id := string(job.ID)
 		if job.CleanupComplete {
 			continue
 		}
@@ -147,31 +148,28 @@ func (s *Service) sweep(ctx context.Context) error {
 			continue
 		}
 		s.mutex.RLock()
-		_, running := s.running[job.ID]
+		_, running := s.running[id]
 		s.mutex.RUnlock()
 		if running || job.Status == JobRunning || (job.Status == JobQueued && job.DeleteRequestedAt == nil) {
 			continue
 		}
 		if err := s.recoverInterruptedOutputs(ctx, &job); err != nil {
-			s.recordCleanupError(ctx, job.ID, err)
+			s.recordCleanupError(ctx, id, err)
 			continue
 		}
-		workspace := filepath.Join(s.config.TempDir, ".lemontube", job.ID)
-		if len(job.ID) != 32 {
+		if err := job.ID.Validate(); err != nil {
 			s.logger.Warn("invalid workspace id", "job", job.ID)
 			continue
 		}
-		if _, err := hex.DecodeString(job.ID); err != nil {
-			continue
-		}
+		workspace := filepath.Join(s.config.TempDir, ".lemontube", id)
 		if err := os.RemoveAll(workspace); err != nil {
-			s.recordCleanupError(ctx, job.ID, err)
+			s.recordCleanupError(ctx, id, err)
 			continue
 		}
 		if job.DeleteRequestedAt == nil && s.config.ClearAfter > 0 && job.FinishedAt != nil {
 			finished, err := time.Parse(time.RFC3339Nano, *job.FinishedAt)
 			if err == nil && time.Since(finished) >= s.config.ClearAfter {
-				_, err = s.repo.RequestDelete(ctx, job.ID, s.config.DeleteOutputs)
+				_, err = s.repo.RequestDelete(ctx, id, s.config.DeleteOutputs)
 				if err != nil {
 					return err
 				}
@@ -181,7 +179,7 @@ func (s *Service) sweep(ctx context.Context) error {
 		}
 		if job.DeleteRequestedAt == nil {
 			if job.CleanupError != nil {
-				if err := s.repo.ClearCleanupError(ctx, job.ID); err != nil {
+				if err := s.repo.ClearCleanupError(ctx, id); err != nil {
 					return err
 				}
 			}
@@ -189,17 +187,17 @@ func (s *Service) sweep(ctx context.Context) error {
 		}
 		if job.DeleteOutputs {
 			if err := s.deleteOutputs(job.Outputs); err != nil {
-				s.recordCleanupError(ctx, job.ID, err)
+				s.recordCleanupError(ctx, id, err)
 				continue
 			}
 		}
 		if !job.DeleteOutputs && len(job.Outputs) > 0 {
-			if err := s.repo.CompleteCleanup(ctx, job.ID); err != nil {
+			if err := s.repo.CompleteCleanup(ctx, id); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := s.repo.DeleteJob(ctx, job.ID); err != nil {
+		if err := s.repo.DeleteJob(ctx, id); err != nil {
 			return err
 		}
 	}
@@ -223,10 +221,10 @@ func (s *Service) cleanOrphanWorkspaces(known map[string]bool) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if known[name] || !entry.IsDir() || len(name) != 32 {
+		if known[name] || !entry.IsDir() {
 			continue
 		}
-		if _, err := hex.DecodeString(name); err != nil {
+		if err := JobID(name).Validate(); err != nil {
 			continue
 		}
 		info, err := entry.Info()
@@ -247,7 +245,7 @@ func (s *Service) recoverInterruptedOutputs(ctx context.Context, job *Job) error
 	changed := false
 	for i := range job.Outputs {
 		item := &job.Outputs[i]
-		if filepath.Base(item.Path) != item.Path || filepath.Base(item.Stage) != item.Stage || !strings.HasPrefix(item.Stage, ".lemontube-"+job.ID+"-") {
+		if filepath.Base(item.Path) != item.Path || filepath.Base(item.Stage) != item.Stage || !strings.HasPrefix(item.Stage, ".lemontube-"+string(job.ID)+"-") {
 			return errors.New("invalid output manifest")
 		}
 		stage := filepath.Join(s.config.DownloadDir, item.Stage)
@@ -272,7 +270,7 @@ func (s *Service) recoverInterruptedOutputs(ctx context.Context, job *Job) error
 			}
 		}
 		if changed {
-			if err := s.repo.SetOutputs(ctx, job.ID, job.Outputs); err != nil {
+			if err := s.repo.SetOutputs(ctx, string(job.ID), job.Outputs); err != nil {
 				return err
 			}
 			changed = false
@@ -345,7 +343,7 @@ func (s *Service) ClearOrphanOutputs(ctx context.Context) (int, int, error) {
 			retained++
 			continue
 		}
-		if err := s.repo.DeleteJob(ctx, job.ID); err != nil {
+		if err := s.repo.DeleteJob(ctx, string(job.ID)); err != nil {
 			return cleared, retained, err
 		}
 		cleared++

@@ -1,12 +1,34 @@
 package internal
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 )
+
+type JobID string
+
+func NewJobID() (JobID, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", fmt.Errorf("generate job ID: %w", err)
+	}
+	return JobID(hex.EncodeToString(random[:])), nil
+}
+
+func (id JobID) Validate() error {
+	if len(id) != 32 {
+		return fmt.Errorf("invalid job ID %q", id)
+	}
+	if _, err := hex.DecodeString(string(id)); err != nil {
+		return fmt.Errorf("invalid job ID %q: %w", id, err)
+	}
+	return nil
+}
 
 // Cookies contains Netscape cookie rows grouped by domain.
 type Cookies map[string]string
@@ -176,7 +198,7 @@ type OutputFile struct {
 }
 
 type Job struct {
-	ID                string          `json:"id"`
+	ID                JobID           `json:"id"`
 	URL               string          `json:"url"`
 	Title             string          `json:"title"`
 	DownloadType      DownloadType    `json:"download_type"`

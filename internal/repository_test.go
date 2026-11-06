@@ -37,8 +37,8 @@ func TestFinishedTimestampIsReadable(t *testing.T) {
 		DownloadType: DownloadVideo,
 	}
 	require.NoError(t, r.CreateJob(t.Context(), job))
-	require.NoError(t, r.FinishJob(t.Context(), job.ID, JobFinished, nil))
-	got, err := r.GetJob(t.Context(), job.ID)
+	require.NoError(t, r.FinishJob(t.Context(), string(job.ID), JobFinished, nil))
+	got, err := r.GetJob(t.Context(), string(job.ID))
 	require.NoError(t, err)
 	require.NotNil(t, got.FinishedAt)
 	_, err = time.Parse(time.RFC3339Nano, *got.FinishedAt)
@@ -57,7 +57,7 @@ func TestRepositoryJobRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newTestRepository(t)
 			require.NoError(t, r.CreateJob(t.Context(), tt.job))
-			got, err := r.GetJob(t.Context(), tt.job.ID)
+			got, err := r.GetJob(t.Context(), string(tt.job.ID))
 			require.NoError(t, err)
 			assert.Equal(t, JobQueued, got.Status)
 			assert.Equal(t, tt.job.Options, got.Options)

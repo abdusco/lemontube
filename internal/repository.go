@@ -97,7 +97,7 @@ type jobRow struct {
 
 func (row jobRow) toDomain() Job {
 	return Job{
-		ID:                row.ID,
+		ID:                JobID(row.ID),
 		URL:               row.URL,
 		Title:             row.Title,
 		DownloadType:      DownloadType(row.DownloadType),

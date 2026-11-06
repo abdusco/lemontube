@@ -2,8 +2,6 @@ package internal
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -77,11 +75,10 @@ func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType Downl
 	if err != nil {
 		return "", err
 	}
-	var random [16]byte
-	if _, err := rand.Read(random[:]); err != nil {
+	id, err := NewJobID()
+	if err != nil {
 		return "", err
 	}
-	id := hex.EncodeToString(random[:])
 	job := Job{
 		ID:           id,
 		URL:          rawURL,
@@ -93,7 +90,7 @@ func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType Downl
 		return "", err
 	}
 	s.signal()
-	return id, nil
+	return string(id), nil
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -147,13 +144,13 @@ func (s *Service) schedule(ctx context.Context) {
 			s.mutex.Unlock()
 			return
 		}
-		claimed, err := s.repo.ClaimJob(ctx, job.ID)
+		claimed, err := s.repo.ClaimJob(ctx, string(job.ID))
 		if err != nil || !claimed {
 			s.mutex.Unlock()
 			continue
 		}
 		jobCtx, cancel := context.WithCancel(ctx)
-		s.running[job.ID] = cancel
+		s.running[string(job.ID)] = cancel
 		s.wg.Add(1)
 		s.mutex.Unlock()
 		go s.run(jobCtx, job)
@@ -161,14 +158,15 @@ func (s *Service) schedule(ctx context.Context) {
 }
 
 func (s *Service) run(ctx context.Context, job Job) {
+	id := string(job.ID)
 	defer s.wg.Done()
 	defer func() {
 		s.mutex.Lock()
-		delete(s.running, job.ID)
+		delete(s.running, id)
 		s.mutex.Unlock()
 		s.signal()
 	}()
-	workspace := filepath.Join(s.config.TempDir, ".lemontube", job.ID)
+	workspace := filepath.Join(s.config.TempDir, ".lemontube", id)
 	err := s.executeJob(ctx, job, workspace)
 	status := JobFinished
 	var message *string
@@ -186,7 +184,7 @@ func (s *Service) run(ctx context.Context, job Job) {
 			status = JobCanceled
 		}
 	}
-	if err := s.repo.FinishJob(context.Background(), job.ID, status, message); err != nil {
+	if err := s.repo.FinishJob(context.Background(), id, status, message); err != nil {
 		s.logger.Error("finish job", "error", err)
 	}
 	if err := os.RemoveAll(workspace); err != nil {
@@ -195,6 +193,7 @@ func (s *Service) run(ctx context.Context, job Job) {
 }
 
 func (s *Service) executeJob(ctx context.Context, job Job, workspace string) error {
+	id := string(job.ID)
 	if err := os.Mkdir(workspace, 0o700); err != nil {
 		return fmt.Errorf("create workspace: %w", err)
 	}
@@ -224,7 +223,7 @@ func (s *Service) executeJob(ctx context.Context, job Job, workspace string) err
 				return
 			}
 			titleSet = true
-			if err := s.repo.SetTitle(context.Background(), job.ID, title); err != nil {
+			if err := s.repo.SetTitle(context.Background(), id, title); err != nil {
 				s.logger.Warn("save title", "error", err)
 			}
 		},
@@ -234,12 +233,12 @@ func (s *Service) executeJob(ctx context.Context, job Job, workspace string) err
 				return
 			}
 			lastPercent = whole
-			if err := s.repo.SetProgress(context.Background(), job.ID, percent); err != nil {
+			if err := s.repo.SetProgress(context.Background(), id, percent); err != nil {
 				s.logger.Warn("save progress", "error", err)
 			}
 		},
 		Log: func(line string) {
-			if err := s.repo.AddLog(context.Background(), job.ID, line); err != nil {
+			if err := s.repo.AddLog(context.Background(), id, line); err != nil {
 				s.logger.Warn("save log", "error", err)
 			}
 		},
@@ -247,7 +246,7 @@ func (s *Service) executeJob(ctx context.Context, job Job, workspace string) err
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
-	if err := s.publish(ctx, job.ID, workspace); err != nil {
+	if err := s.publish(ctx, id, workspace); err != nil {
 		return fmt.Errorf("publish outputs: %w", err)
 	}
 	return nil

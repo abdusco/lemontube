@@ -8,6 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestJobID(t *testing.T) {
+	id, err := NewJobID()
+	require.NoError(t, err)
+	require.NoError(t, id.Validate())
+	assert.Len(t, id, 32)
+	for _, invalid := range []JobID{"", "../other", "0000000000000000000000000000000z"} {
+		assert.Error(t, invalid.Validate())
+	}
+	assert.NoError(t, JobID("ABCDEF0123456789abcdef0123456789").Validate())
+}
+
 func TestCookiesFormatting(t *testing.T) {
 	tests := []struct {
 		name    string
