@@ -189,7 +189,10 @@ func TestSweepRetainsFailedDeletionForRetry(t *testing.T) {
 		Title:        "example",
 		DownloadType: DownloadVideo,
 	}))
-	require.NoError(t, repo.FinishJob(t.Context(), id, JobFinished, nil))
+	require.NoError(t, repo.FinishJob(t.Context(), FinishJobParams{
+		ID:     id,
+		Status: JobFinished,
+	}))
 	path := filepath.Join(s.config.DownloadDir, "video.mp4")
 	require.NoError(t, os.WriteFile(path, []byte("changed"), 0o600))
 	digest := sha256.Sum256([]byte("original"))

@@ -198,7 +198,11 @@ func (s *Service) run(ctx context.Context, job Job) {
 			status = JobCanceled
 		}
 	}
-	if err := s.repo.FinishJob(context.Background(), id, status, message); err != nil {
+	if err := s.repo.FinishJob(context.Background(), FinishJobParams{
+		ID:      id,
+		Status:  status,
+		Message: message,
+	}); err != nil {
 		s.logger.Error("finish job", "error", err)
 	}
 	if err := os.RemoveAll(workspace); err != nil {

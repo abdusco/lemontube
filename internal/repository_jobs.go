@@ -53,16 +53,22 @@ func (r *Repository) ClaimJob(ctx context.Context, id JobID) (bool, error) {
 	return count == 1, err
 }
 
-func (r *Repository) FinishJob(ctx context.Context, id JobID, status JobStatus, message *string) error {
+type FinishJobParams struct {
+	ID      JobID
+	Status  JobStatus
+	Message *string
+}
+
+func (r *Repository) FinishJob(ctx context.Context, params FinishJobParams) error {
 	timestamp := now()
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
-			"status":      status,
-			"error":       message,
+			"status":      params.Status,
+			"error":       params.Message,
 			"updated_at":  timestamp,
 			"finished_at": timestamp,
 		}).
-		Where(goqu.C("id").Eq(id))
+		Where(goqu.C("id").Eq(params.ID))
 	_, err := q.Executor().ExecContext(ctx)
 	return err
 }

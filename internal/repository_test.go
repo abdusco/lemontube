@@ -37,7 +37,10 @@ func TestFinishedTimestampIsReadable(t *testing.T) {
 		DownloadType: DownloadVideo,
 	}
 	require.NoError(t, r.CreateJob(t.Context(), job))
-	require.NoError(t, r.FinishJob(t.Context(), job.ID, JobFinished, nil))
+	require.NoError(t, r.FinishJob(t.Context(), FinishJobParams{
+		ID:     job.ID,
+		Status: JobFinished,
+	}))
 	got, err := r.GetJob(t.Context(), job.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.FinishedAt)
