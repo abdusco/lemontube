@@ -5,7 +5,7 @@
 - Write idiomatic, maintainable Go rather than mechanically translating another application's implementation. Prefer simple designs and avoid abstractions that do not solve a concrete problem.
 - Optimize code for human readers. Use multiline branches, loops, struct/map literals, and chained calls where that improves readability; do not compress control flow onto one line.
 - Format Go code with `gofumpt`.
-- Commit after each feature or fix using conventional commits. Never mix unrelated changes in one commit; amend or split commits when needed.
+- Commit after each feature or fix using conventional commits. Amend the latest commit for related follow-up changes when appropriate instead of creating a separate commit. Never mix unrelated changes in one commit; split commits when needed.
 
 ## Go organization and validation
 
