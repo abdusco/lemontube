@@ -41,7 +41,7 @@ func TestAuthenticationLoginPage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			auth := newAuthentication(users, tt.page)
+			auth := newAuthentication(authenticationParams{users: users, loginPage: tt.page})
 			require.NotNil(t, auth.sessions)
 			e := echo.New()
 			auth.registerRoutes(e, rateLimit(30, time.Minute))
@@ -64,10 +64,11 @@ func TestParseAuthUsers(t *testing.T) {
 		}},
 		{"multiple users and password with colon", `["user:pass:word","user2:pass2"]`, func(t *testing.T, users []AuthUser, err error) {
 			require.NoError(t, err)
-			a := authentication{users: users}
-			assert.True(t, a.allowed("user", "pass:word"))
-			assert.True(t, a.allowed("user2", "pass2"))
-			assert.False(t, a.allowed("user", "pass2"))
+			require.Len(t, users, 2)
+			assert.True(t, users[0].MatchesCredentials("user", "pass:word"))
+			assert.False(t, users[0].MatchesCredentials("user", "pass2"))
+			assert.True(t, users[1].MatchesCredentials("user2", "pass2"))
+			assert.False(t, users[1].MatchesCredentials("user", "pass2"))
 		}},
 		{"empty array", `[]`, func(t *testing.T, users []AuthUser, err error) { require.Error(t, err) }},
 		{"invalid json", `broken`, func(t *testing.T, users []AuthUser, err error) { require.Error(t, err) }},

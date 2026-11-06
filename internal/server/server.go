@@ -13,8 +13,11 @@ import (
 
 func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	e := echo.New()
-	auth := newAuthentication(users, func() ([]byte, error) {
-		return fs.ReadFile(assets, "login.html")
+	auth := newAuthentication(authenticationParams{
+		users: users,
+		loginPage: func() ([]byte, error) {
+			return fs.ReadFile(assets, "login.html")
+		},
 	})
 	auth.registerRoutes(e, rateLimit(30, time.Minute))
 	api := e.Group("/api", auth.requireAPIAuth)

@@ -24,6 +24,12 @@ type AuthUser struct {
 	password [32]byte
 }
 
+func (u AuthUser) MatchesCredentials(username, password string) bool {
+	userHash := sha256.Sum256([]byte(username))
+	passwordHash := sha256.Sum256([]byte(password))
+	return subtle.ConstantTimeCompare(userHash[:], u.username[:])&subtle.ConstantTimeCompare(passwordHash[:], u.password[:]) == 1
+}
+
 // ParseAuthUsers parses a JSON array of username:password entries.
 func ParseAuthUsers(value string) ([]AuthUser, error) {
 	if value == "" {
@@ -53,10 +59,15 @@ type authentication struct {
 	sessions  map[string]time.Time
 }
 
-func newAuthentication(users []AuthUser, loginPage func() ([]byte, error)) *authentication {
+type authenticationParams struct {
+	users     []AuthUser
+	loginPage func() ([]byte, error)
+}
+
+func newAuthentication(params authenticationParams) *authentication {
 	return &authentication{
-		users:     users,
-		loginPage: loginPage,
+		users:     params.users,
+		loginPage: params.loginPage,
 		sessions:  make(map[string]time.Time),
 	}
 }
@@ -88,16 +99,6 @@ func (a *authentication) registerRoutes(e *echo.Echo, loginLimit echo.Middleware
 	}, noStore, a.requireAPIAuth)
 }
 
-func (a *authentication) allowed(username, password string) bool {
-	userHash := sha256.Sum256([]byte(username))
-	passwordHash := sha256.Sum256([]byte(password))
-	match := 0
-	for _, user := range a.users {
-		match |= subtle.ConstantTimeCompare(userHash[:], user.username[:]) & subtle.ConstantTimeCompare(passwordHash[:], user.password[:])
-	}
-	return match == 1
-}
-
 func (a *authentication) login(c echo.Context) error {
 	if !sameOrigin(c.Request()) {
 		return echo.ErrForbidden
@@ -106,7 +107,14 @@ func (a *authentication) login(c echo.Context) error {
 	if err := c.Request().ParseForm(); err != nil {
 		return echo.ErrBadRequest
 	}
-	if !a.allowed(c.FormValue("username"), c.FormValue("password")) {
+	username, password := c.FormValue("username"), c.FormValue("password")
+	authenticated := false
+	for _, user := range a.users {
+		if user.MatchesCredentials(username, password) {
+			authenticated = true
+		}
+	}
+	if !authenticated {
 		return c.Redirect(http.StatusSeeOther, "/login?error=1")
 	}
 	var token [32]byte
