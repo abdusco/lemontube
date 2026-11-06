@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -199,14 +198,14 @@ func (s *Service) executeJob(ctx context.Context, job Job, workspace string) err
 	if err := os.Mkdir(workspace, 0o700); err != nil {
 		return fmt.Errorf("create workspace: %w", err)
 	}
-	_, cookies, err := s.repo.Cookies(ctx)
+	cookies, err := s.repo.Cookies(ctx)
 	if err != nil {
 		return fmt.Errorf("load cookies: %w", err)
 	}
 	cookieFile := ""
-	if strings.TrimSpace(cookies) != "# Netscape HTTP Cookie File" {
+	if len(cookies) > 0 {
 		cookieFile = filepath.Join(workspace, ".cookies.txt")
-		if err := os.WriteFile(cookieFile, []byte(cookies), 0o600); err != nil {
+		if err := os.WriteFile(cookieFile, []byte(cookies.NetscapeTXT()), 0o600); err != nil {
 			return fmt.Errorf("write cookies file: %w", err)
 		}
 	}
@@ -299,45 +298,22 @@ func (s *Service) Retry(ctx context.Context, id string) (string, error) {
 }
 
 func (s *Service) Cookies(ctx context.Context) ([]string, error) {
-	domains, _, err := s.repo.Cookies(ctx)
-	return domains, err
+	cookies, err := s.repo.Cookies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return cookies.Domains(), nil
 }
 
 func (s *Service) SaveCookies(ctx context.Context, text string) error {
 	if len(text) > 1_000_000 {
 		return errors.New("cookie file exceeds 1 MB")
 	}
-	cookies, err := parseCookiesTXT(text)
+	cookies, err := ParseCookiesTXT(text)
 	if err != nil {
 		return err
 	}
 	return s.repo.PutCookies(ctx, cookies)
-}
-
-func parseCookiesTXT(text string) (map[string]string, error) {
-	byDomain := make(map[string][]string)
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		parsed := line
-		if strings.HasPrefix(line, "#HttpOnly_") {
-			parsed = strings.TrimPrefix(line, "#HttpOnly_")
-		} else if strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Split(parsed, "\t")
-		if len(fields) != 7 || fields[0] == "" {
-			continue
-		}
-		byDomain[fields[0]] = append(byDomain[fields[0]], line)
-	}
-	if len(byDomain) == 0 {
-		return nil, errors.New("no valid cookies found")
-	}
-	cookies := make(map[string]string, len(byDomain))
-	for domain, lines := range byDomain {
-		cookies[domain] = strings.Join(lines, "\n")
-	}
-	return cookies, nil
 }
 
 func (s *Service) DeleteCookies(ctx context.Context, domain string) error {

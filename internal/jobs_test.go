@@ -121,15 +121,15 @@ func TestParseCookiesTXT(t *testing.T) {
 	tests := []struct {
 		name         string
 		text         string
-		assertResult func(t *testing.T, cookies map[string]string, err error)
+		assertResult func(t *testing.T, cookies Cookies, err error)
 	}{
 		{
 			name: "groups cookies and preserves http-only rows",
 			text: "# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\ta\tone\n" +
 				"#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tb\ttwo\nother.example\tFALSE\t/\tFALSE\t0\tc\tthree\n",
-			assertResult: func(t *testing.T, cookies map[string]string, err error) {
+			assertResult: func(t *testing.T, cookies Cookies, err error) {
 				require.NoError(t, err)
-				assert.Equal(t, map[string]string{
+				assert.Equal(t, Cookies{
 					".example.com":  ".example.com\tTRUE\t/\tTRUE\t0\ta\tone\n#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tb\ttwo",
 					"other.example": "other.example\tFALSE\t/\tFALSE\t0\tc\tthree",
 				}, cookies)
@@ -138,15 +138,15 @@ func TestParseCookiesTXT(t *testing.T) {
 		{
 			name: "skips malformed rows when another row is valid",
 			text: "bad row\n\tTRUE\t/\tTRUE\t0\ta\tb\nexample.com\tFALSE\t/\tFALSE\t0\ta\tb",
-			assertResult: func(t *testing.T, cookies map[string]string, err error) {
+			assertResult: func(t *testing.T, cookies Cookies, err error) {
 				require.NoError(t, err)
-				assert.Equal(t, map[string]string{"example.com": "example.com\tFALSE\t/\tFALSE\t0\ta\tb"}, cookies)
+				assert.Equal(t, Cookies{"example.com": "example.com\tFALSE\t/\tFALSE\t0\ta\tb"}, cookies)
 			},
 		},
 		{
 			name: "rejects input without valid rows",
 			text: "# comment\ninvalid",
-			assertResult: func(t *testing.T, cookies map[string]string, err error) {
+			assertResult: func(t *testing.T, cookies Cookies, err error) {
 				require.ErrorContains(t, err, "no valid cookies found")
 				assert.Nil(t, cookies)
 			},
@@ -154,7 +154,7 @@ func TestParseCookiesTXT(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cookies, err := parseCookiesTXT(tt.text)
+			cookies, err := ParseCookiesTXT(tt.text)
 			tt.assertResult(t, cookies, err)
 		})
 	}
@@ -169,9 +169,9 @@ func TestCookiesAreSavedByDomain(t *testing.T) {
 	domains, err := s.Cookies(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{".example.com", ".other.example"}, domains)
-	_, stored, err := s.repo.Cookies(t.Context())
+	stored, err := s.repo.Cookies(t.Context())
 	require.NoError(t, err)
-	assert.Contains(t, stored, "#HttpOnly_.example.com")
+	assert.Contains(t, stored.NetscapeTXT(), "#HttpOnly_.example.com")
 	require.NoError(t, s.DeleteCookies(t.Context(), ".example.com"))
 	domains, err = s.Cookies(t.Context())
 	require.NoError(t, err)

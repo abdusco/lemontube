@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"strings"
 
 	"github.com/doug-martin/goqu/v9"
 )
@@ -12,7 +11,7 @@ type cookieRow struct {
 	Content string `db:"content"`
 }
 
-func (r *Repository) PutCookies(ctx context.Context, cookies map[string]string) error {
+func (r *Repository) PutCookies(ctx context.Context, cookies Cookies) error {
 	return r.db.WithTx(func(tx *goqu.TxDatabase) error {
 		for domain, content := range cookies {
 			q := tx.Insert("cookies").
@@ -33,21 +32,19 @@ func (r *Repository) PutCookies(ctx context.Context, cookies map[string]string) 
 	})
 }
 
-func (r *Repository) Cookies(ctx context.Context) ([]string, string, error) {
+func (r *Repository) Cookies(ctx context.Context) (Cookies, error) {
 	q := r.db.From("cookies").
 		Select(&cookieRow{}).
 		Order(goqu.C("domain").Asc())
 	var rows []cookieRow
 	if err := q.ScanStructsContext(ctx, &rows); err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	domains := make([]string, 0, len(rows))
-	var contents []string
+	cookies := make(Cookies, len(rows))
 	for _, row := range rows {
-		domains = append(domains, row.Domain)
-		contents = append(contents, row.Content)
+		cookies[row.Domain] = row.Content
 	}
-	return domains, "# Netscape HTTP Cookie File\n" + strings.Join(contents, "\n") + "\n", nil
+	return cookies, nil
 }
 
 func (r *Repository) DeleteCookies(ctx context.Context, domain string) error {

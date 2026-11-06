@@ -3,9 +3,56 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
+
+// Cookies contains Netscape cookie rows grouped by domain.
+type Cookies map[string]string
+
+func ParseCookiesTXT(text string) (Cookies, error) {
+	byDomain := make(map[string][]string)
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		parsed := line
+		if strings.HasPrefix(line, "#HttpOnly_") {
+			parsed = strings.TrimPrefix(line, "#HttpOnly_")
+		} else if strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Split(parsed, "\t")
+		if len(fields) != 7 || fields[0] == "" {
+			continue
+		}
+		byDomain[fields[0]] = append(byDomain[fields[0]], line)
+	}
+	if len(byDomain) == 0 {
+		return nil, errors.New("no valid cookies found")
+	}
+	cookies := make(Cookies, len(byDomain))
+	for domain, lines := range byDomain {
+		cookies[domain] = strings.Join(lines, "\n")
+	}
+	return cookies, nil
+}
+
+func (c Cookies) Domains() []string {
+	domains := make([]string, 0, len(c))
+	for domain := range c {
+		domains = append(domains, domain)
+	}
+	sort.Strings(domains)
+	return domains
+}
+
+func (c Cookies) NetscapeTXT() string {
+	contents := make([]string, 0, len(c))
+	for _, domain := range c.Domains() {
+		contents = append(contents, c[domain])
+	}
+	return "# Netscape HTTP Cookie File\n" + strings.Join(contents, "\n") + "\n"
+}
 
 type JobStatus string
 

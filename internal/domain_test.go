@@ -8,6 +8,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCookiesFormatting(t *testing.T) {
+	tests := []struct {
+		name    string
+		cookies Cookies
+		domains []string
+		text    string
+	}{
+		{"empty", nil, []string{}, "# Netscape HTTP Cookie File\n\n"},
+		{"sorted domains", Cookies{"z.example": "z row", "a.example": "a row\nsecond row"}, []string{"a.example", "z.example"}, "# Netscape HTTP Cookie File\na row\nsecond row\nz row\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.domains, tt.cookies.Domains())
+			assert.Equal(t, tt.text, tt.cookies.NetscapeTXT())
+		})
+	}
+}
+
 func TestOutputEnums(t *testing.T) {
 	for _, kind := range []OutputKind{OutputMedia, OutputSubtitle} {
 		assert.NoError(t, kind.Validate())
