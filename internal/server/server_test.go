@@ -109,8 +109,9 @@ func TestHTTPAPI(t *testing.T) {
 
 func TestDeleteCookiesForOneDomain(t *testing.T) {
 	server := newTestServer(t)
-	content := ".example.com\tTRUE\t/\tTRUE\t0\tsession\tsecret\n" +
-		".other.example\tTRUE\t/\tFALSE\t0\tkey\tvalue\n"
+	content := `.example.com	TRUE	/	TRUE	0	session	secret
+.other.example	TRUE	/	FALSE	0	key	value
+`
 
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/cookies", strings.NewReader(content)))

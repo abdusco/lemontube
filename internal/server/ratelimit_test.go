@@ -16,8 +16,16 @@ func TestRateLimit(t *testing.T) {
 		window time.Duration
 		want   []int
 	}{
-		{"limits requests", time.Minute, []int{http.StatusNoContent, http.StatusNoContent, http.StatusTooManyRequests}},
-		{"resets expired window", 0, []int{http.StatusNoContent, http.StatusNoContent, http.StatusNoContent}},
+		{
+			name:   "limits requests",
+			window: time.Minute,
+			want:   []int{http.StatusNoContent, http.StatusNoContent, http.StatusTooManyRequests},
+		},
+		{
+			name:   "resets expired window",
+			window: 0,
+			want:   []int{http.StatusNoContent, http.StatusNoContent, http.StatusNoContent},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

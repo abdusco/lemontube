@@ -9,23 +9,89 @@ import (
 )
 
 func TestJobStatusIsActive(t *testing.T) {
-	for _, status := range []JobStatus{JobQueued, JobRunning} {
-		assert.True(t, status.IsActive(), "%s", status)
-	}
-	for _, status := range []JobStatus{JobFinished, JobFailed, JobCanceled, "invalid"} {
-		assert.False(t, status.IsActive(), "%s", status)
+	for _, tt := range []struct {
+		name     string
+		value    JobStatus
+		expected bool
+	}{
+		{
+			name:     "queued",
+			value:    JobQueued,
+			expected: true,
+		},
+		{
+			name:     "running",
+			value:    JobRunning,
+			expected: true,
+		},
+		{
+			name:  "finished",
+			value: JobFinished,
+		},
+		{
+			name:  "failed",
+			value: JobFailed,
+		},
+		{
+			name:  "canceled",
+			value: JobCanceled,
+		},
+		{
+			name:  "invalid",
+			value: "invalid",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.value.IsActive())
+		})
 	}
 }
 
-func TestJobID(t *testing.T) {
+func TestNewJobID(t *testing.T) {
 	id, err := NewJobID()
 	require.NoError(t, err)
 	require.NoError(t, id.Validate())
 	assert.Len(t, id, 32)
-	for _, invalid := range []JobID{"", "../other", "0000000000000000000000000000000z"} {
-		assert.Error(t, invalid.Validate())
+}
+
+func TestJobIDValidate(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		id           JobID
+		assertResult func(t *testing.T, err error)
+	}{
+		{
+			name: "empty",
+			assertResult: func(t *testing.T, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "path traversal",
+			id:   "../other",
+			assertResult: func(t *testing.T, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "invalid hex",
+			id:   "0000000000000000000000000000000z",
+			assertResult: func(t *testing.T, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "mixed case hex",
+			id:   "ABCDEF0123456789abcdef0123456789",
+			assertResult: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertResult(t, tt.id.Validate())
+		})
 	}
-	assert.NoError(t, JobID("ABCDEF0123456789abcdef0123456789").Validate())
 }
 
 func TestCookiesFormatting(t *testing.T) {
@@ -35,8 +101,27 @@ func TestCookiesFormatting(t *testing.T) {
 		domains []string
 		text    string
 	}{
-		{"empty", nil, []string{}, "# Netscape HTTP Cookie File\n\n"},
-		{"sorted domains", Cookies{"z.example": "z row", "a.example": "a row\nsecond row"}, []string{"a.example", "z.example"}, "# Netscape HTTP Cookie File\na row\nsecond row\nz row\n"},
+		{
+			name:    "empty",
+			domains: []string{},
+			text: `# Netscape HTTP Cookie File
+
+`,
+		},
+		{
+			name: "sorted domains",
+			cookies: Cookies{
+				"z.example": "z row",
+				"a.example": `a row
+second row`,
+			},
+			domains: []string{"a.example", "z.example"},
+			text: `# Netscape HTTP Cookie File
+a row
+second row
+z row
+`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,15 +132,19 @@ func TestCookiesFormatting(t *testing.T) {
 }
 
 func TestOutputEnums(t *testing.T) {
-	for _, kind := range []OutputKind{OutputMedia, OutputSubtitle} {
-		assert.NoError(t, kind.Validate())
-	}
-	assert.Error(t, OutputKind("unknown").Validate())
-	for _, state := range []OutputState{OutputPublishing, OutputPublished} {
-		assert.NoError(t, state.Validate())
-	}
-	assert.Error(t, OutputState("unknown").Validate())
+	t.Run("kind", func(t *testing.T) {
+		assert.NoError(t, OutputMedia.Validate())
+		assert.NoError(t, OutputSubtitle.Validate())
+		assert.Error(t, OutputKind("unknown").Validate())
+	})
+	t.Run("state", func(t *testing.T) {
+		assert.NoError(t, OutputPublishing.Validate())
+		assert.NoError(t, OutputPublished.Validate())
+		assert.Error(t, OutputState("unknown").Validate())
+	})
+}
 
+func TestOutputJSONRoundTrip(t *testing.T) {
 	output := OutputFile{Path: "video.mp4", Kind: OutputMedia, State: OutputPublished}
 	data, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -72,33 +161,74 @@ func TestDownloadOptionsNormalize(t *testing.T) {
 		options      DownloadOptions
 		assertResult func(t *testing.T, options DownloadOptions, err error)
 	}{
-		{"video defaults", DownloadVideo, DownloadOptions{}, func(t *testing.T, options DownloadOptions, err error) {
-			require.NoError(t, err)
-			assert.Equal(t, DownloadOptions{Format: "mp4", Quality: "best"}, options)
-		}},
-		{"audio defaults", DownloadAudio, DownloadOptions{}, func(t *testing.T, options DownloadOptions, err error) {
-			require.NoError(t, err)
-			assert.Equal(t, DownloadOptions{Format: "mp3", Quality: "best"}, options)
-		}},
-		{"explicit options", DownloadVideo, DownloadOptions{Format: "any", Quality: "720", SubtitleLangs: []string{"en", "fr"}}, func(t *testing.T, options DownloadOptions, err error) {
-			require.NoError(t, err)
-			assert.Equal(t, DownloadOptions{Format: "any", Quality: "720", SubtitleLangs: []string{"en", "fr"}}, options)
-		}},
-		{"invalid type", "invalid", DownloadOptions{}, func(t *testing.T, _ DownloadOptions, err error) {
-			require.ErrorContains(t, err, "invalid download type")
-		}},
-		{"invalid audio format", DownloadAudio, DownloadOptions{Format: "mp4"}, func(t *testing.T, _ DownloadOptions, err error) {
-			require.ErrorContains(t, err, "invalid audio format")
-		}},
-		{"invalid video format", DownloadVideo, DownloadOptions{Format: "mp3"}, func(t *testing.T, _ DownloadOptions, err error) {
-			require.ErrorContains(t, err, "invalid video format")
-		}},
-		{"invalid quality", DownloadVideo, DownloadOptions{Quality: "10001"}, func(t *testing.T, _ DownloadOptions, err error) {
-			require.ErrorContains(t, err, "invalid quality")
-		}},
-		{"invalid language", DownloadVideo, DownloadOptions{SubtitleLangs: []string{"en,fr"}}, func(t *testing.T, _ DownloadOptions, err error) {
-			require.ErrorContains(t, err, "invalid subtitle language")
-		}},
+		{
+			name: "video defaults",
+			kind: DownloadVideo,
+			assertResult: func(t *testing.T, options DownloadOptions, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, DownloadOptions{Format: "mp4", Quality: "best"}, options)
+			},
+		},
+		{
+			name: "audio defaults",
+			kind: DownloadAudio,
+			assertResult: func(t *testing.T, options DownloadOptions, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, DownloadOptions{Format: "mp3", Quality: "best"}, options)
+			},
+		},
+		{
+			name: "explicit options",
+			kind: DownloadVideo,
+			options: DownloadOptions{
+				Format:        "any",
+				Quality:       "720",
+				SubtitleLangs: []string{"en", "fr"},
+			},
+			assertResult: func(t *testing.T, options DownloadOptions, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, DownloadOptions{Format: "any", Quality: "720", SubtitleLangs: []string{"en", "fr"}}, options)
+			},
+		},
+		{
+			name: "invalid type",
+			kind: "invalid",
+			assertResult: func(t *testing.T, _ DownloadOptions, err error) {
+				require.ErrorContains(t, err, "invalid download type")
+			},
+		},
+		{
+			name:    "invalid audio format",
+			kind:    DownloadAudio,
+			options: DownloadOptions{Format: "mp4"},
+			assertResult: func(t *testing.T, _ DownloadOptions, err error) {
+				require.ErrorContains(t, err, "invalid audio format")
+			},
+		},
+		{
+			name:    "invalid video format",
+			kind:    DownloadVideo,
+			options: DownloadOptions{Format: "mp3"},
+			assertResult: func(t *testing.T, _ DownloadOptions, err error) {
+				require.ErrorContains(t, err, "invalid video format")
+			},
+		},
+		{
+			name:    "invalid quality",
+			kind:    DownloadVideo,
+			options: DownloadOptions{Quality: "10001"},
+			assertResult: func(t *testing.T, _ DownloadOptions, err error) {
+				require.ErrorContains(t, err, "invalid quality")
+			},
+		},
+		{
+			name:    "invalid language",
+			kind:    DownloadVideo,
+			options: DownloadOptions{SubtitleLangs: []string{"en,fr"}},
+			assertResult: func(t *testing.T, _ DownloadOptions, err error) {
+				require.ErrorContains(t, err, "invalid subtitle language")
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

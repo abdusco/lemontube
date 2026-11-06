@@ -79,22 +79,53 @@ func TestParseAuthUsers(t *testing.T) {
 		value        string
 		assertResult func(t *testing.T, users []AuthUser, err error)
 	}{
-		{"unset disables authentication", "", func(t *testing.T, users []AuthUser, err error) {
-			require.NoError(t, err)
-			assert.Empty(t, users)
-		}},
-		{"multiple users and password with colon", `["user:pass:word","user2:pass2"]`, func(t *testing.T, users []AuthUser, err error) {
-			require.NoError(t, err)
-			require.Len(t, users, 2)
-			assert.True(t, users[0].MatchesCredentials("user", "pass:word"))
-			assert.False(t, users[0].MatchesCredentials("user", "pass2"))
-			assert.True(t, users[1].MatchesCredentials("user2", "pass2"))
-			assert.False(t, users[1].MatchesCredentials("user", "pass2"))
-		}},
-		{"empty array", `[]`, func(t *testing.T, users []AuthUser, err error) { require.Error(t, err) }},
-		{"invalid json", `broken`, func(t *testing.T, users []AuthUser, err error) { require.Error(t, err) }},
-		{"empty password", `["user:"]`, func(t *testing.T, users []AuthUser, err error) { require.Error(t, err) }},
-		{"duplicate username", `["user:a","user:b"]`, func(t *testing.T, users []AuthUser, err error) { require.Error(t, err) }},
+		{
+			name: "unset disables authentication",
+			assertResult: func(t *testing.T, users []AuthUser, err error) {
+				require.NoError(t, err)
+				assert.Empty(t, users)
+			},
+		},
+		{
+			name:  "multiple users and password with colon",
+			value: `["user:pass:word","user2:pass2"]`,
+			assertResult: func(t *testing.T, users []AuthUser, err error) {
+				require.NoError(t, err)
+				require.Len(t, users, 2)
+				assert.True(t, users[0].MatchesCredentials("user", "pass:word"))
+				assert.False(t, users[0].MatchesCredentials("user", "pass2"))
+				assert.True(t, users[1].MatchesCredentials("user2", "pass2"))
+				assert.False(t, users[1].MatchesCredentials("user", "pass2"))
+			},
+		},
+		{
+			name:  "empty array",
+			value: `[]`,
+			assertResult: func(t *testing.T, users []AuthUser, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name:  "invalid json",
+			value: `broken`,
+			assertResult: func(t *testing.T, users []AuthUser, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name:  "empty password",
+			value: `["user:"]`,
+			assertResult: func(t *testing.T, users []AuthUser, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name:  "duplicate username",
+			value: `["user:a","user:b"]`,
+			assertResult: func(t *testing.T, users []AuthUser, err error) {
+				require.Error(t, err)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -121,48 +152,126 @@ func TestAuthentication(t *testing.T) {
 		return response
 	}
 
-	assert.Equal(t, http.StatusSeeOther, request(http.MethodGet, "/", "", nil).Code)
-	assert.Equal(t, http.StatusUnauthorized, request(http.MethodGet, "/api/jobs", "", nil).Code)
-	assert.Equal(t, http.StatusSeeOther, request(http.MethodGet, "/download/file.mp4", "", nil).Code)
-	assert.Equal(t, http.StatusNoContent, request(http.MethodGet, "/health", "", nil).Code)
-	assert.Equal(t, http.StatusOK, request(http.MethodGet, "/login", "", nil).Code)
-	assert.Equal(t, http.StatusOK, request(http.MethodGet, "/styles.css", "", nil).Code)
-	assert.Equal(t, http.StatusSeeOther, request(http.MethodGet, "/app.js", "", nil).Code)
-	assert.Equal(t, http.StatusUnauthorized, request(http.MethodGet, "/api/session", "", nil).Code)
-	assert.Equal(t, http.StatusUnauthorized, request(http.MethodPost, "/logout", "", nil).Code)
-	bad := request(http.MethodPost, "/login", "username=alice&password=wrong", nil)
-	assert.Equal(t, "/login?error=1", bad.Header().Get("Location"))
-	assert.Equal(t, "no-store", bad.Header().Get("Cache-Control"))
-	assert.Empty(t, bad.Result().Cookies())
+	for _, tt := range []struct {
+		name   string
+		method string
+		path   string
+		status int
+	}{
+		{
+			name:   "home",
+			method: http.MethodGet,
+			path:   "/",
+			status: http.StatusSeeOther,
+		},
+		{
+			name:   "jobs",
+			method: http.MethodGet,
+			path:   "/api/jobs",
+			status: http.StatusUnauthorized,
+		},
+		{
+			name:   "download",
+			method: http.MethodGet,
+			path:   "/download/file.mp4",
+			status: http.StatusSeeOther,
+		},
+		{
+			name:   "health",
+			method: http.MethodGet,
+			path:   "/health",
+			status: http.StatusNoContent,
+		},
+		{
+			name:   "login",
+			method: http.MethodGet,
+			path:   "/login",
+			status: http.StatusOK,
+		},
+		{
+			name:   "login stylesheet",
+			method: http.MethodGet,
+			path:   "/styles.css",
+			status: http.StatusOK,
+		},
+		{
+			name:   "app script",
+			method: http.MethodGet,
+			path:   "/app.js",
+			status: http.StatusSeeOther,
+		},
+		{
+			name:   "session",
+			method: http.MethodGet,
+			path:   "/api/session",
+			status: http.StatusUnauthorized,
+		},
+		{
+			name:   "logout",
+			method: http.MethodPost,
+			path:   "/logout",
+			status: http.StatusUnauthorized,
+		},
+	} {
+		t.Run("unauthenticated "+tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.status, request(tt.method, tt.path, "", nil).Code)
+		})
+	}
+	t.Run("invalid credentials", func(t *testing.T) {
+		bad := request(http.MethodPost, "/login", "username=alice&password=wrong", nil)
+		assert.Equal(t, "/login?error=1", bad.Header().Get("Location"))
+		assert.Equal(t, "no-store", bad.Header().Get("Cache-Control"))
+		assert.Empty(t, bad.Result().Cookies())
+	})
 
-	form := url.Values{"username": {"bob"}, "password": {"second"}}
-	response := request(http.MethodPost, "/login", form.Encode(), nil)
-	require.Equal(t, http.StatusSeeOther, response.Code)
-	require.Len(t, response.Result().Cookies(), 1)
-	cookie := response.Result().Cookies()[0]
-	assert.True(t, cookie.HttpOnly)
-	assert.Equal(t, http.SameSiteStrictMode, cookie.SameSite)
-	assert.Equal(t, http.StatusOK, request(http.MethodGet, "/api/jobs", "", cookie).Code)
-	session := request(http.MethodGet, "/api/session", "", cookie)
-	assert.Equal(t, http.StatusOK, session.Code)
-	assert.Equal(t, "no-store", session.Header().Get("Cache-Control"))
-	assert.Equal(t, http.StatusOK, request(http.MethodGet, "/app.js", "", cookie).Code)
+	t.Run("login session and logout", func(t *testing.T) {
+		form := url.Values{"username": {"bob"}, "password": {"second"}}
+		response := request(http.MethodPost, "/login", form.Encode(), nil)
+		require.Equal(t, http.StatusSeeOther, response.Code)
+		require.Len(t, response.Result().Cookies(), 1)
+		cookie := response.Result().Cookies()[0]
+		assert.True(t, cookie.HttpOnly)
+		assert.Equal(t, http.SameSiteStrictMode, cookie.SameSite)
+		assert.Equal(t, http.StatusOK, request(http.MethodGet, "/api/jobs", "", cookie).Code)
+		session := request(http.MethodGet, "/api/session", "", cookie)
+		assert.Equal(t, http.StatusOK, session.Code)
+		assert.Equal(t, "no-store", session.Header().Get("Cache-Control"))
+		assert.Equal(t, http.StatusOK, request(http.MethodGet, "/app.js", "", cookie).Code)
 
-	logout := request(http.MethodPost, "/logout", "", cookie)
-	assert.Equal(t, http.StatusSeeOther, logout.Code)
-	assert.Equal(t, http.StatusUnauthorized, request(http.MethodGet, "/api/jobs", "", cookie).Code)
+		logout := request(http.MethodPost, "/logout", "", cookie)
+		assert.Equal(t, http.StatusSeeOther, logout.Code)
+		assert.Equal(t, http.StatusUnauthorized, request(http.MethodGet, "/api/jobs", "", cookie).Code)
 
-	crossOrigin := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
-	crossOrigin.Header.Set("Origin", "https://attacker.example")
-	response = httptest.NewRecorder()
-	server.ServeHTTP(response, crossOrigin)
-	assert.Equal(t, http.StatusForbidden, response.Code)
-	crossOrigin = httptest.NewRequest(http.MethodPost, "/api/jobs", strings.NewReader("{}"))
-	crossOrigin.Header.Set("Origin", "https://attacker.example")
-	crossOrigin.AddCookie(cookie)
-	response = httptest.NewRecorder()
-	server.ServeHTTP(response, crossOrigin)
-	assert.Equal(t, http.StatusForbidden, response.Code)
+		for _, tt := range []struct {
+			name   string
+			path   string
+			body   string
+			cookie *http.Cookie
+		}{
+			{
+				name: "login",
+				path: "/login",
+				body: form.Encode(),
+			},
+			{
+				name:   "jobs",
+				path:   "/api/jobs",
+				body:   "{}",
+				cookie: cookie,
+			},
+		} {
+			t.Run("cross-origin "+tt.name, func(t *testing.T) {
+				crossOrigin := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body))
+				crossOrigin.Header.Set("Origin", "https://attacker.example")
+				if tt.cookie != nil {
+					crossOrigin.AddCookie(tt.cookie)
+				}
+				response := httptest.NewRecorder()
+				server.ServeHTTP(response, crossOrigin)
+				assert.Equal(t, http.StatusForbidden, response.Code)
+			})
+		}
+	})
 }
 
 func TestLoginRateLimit(t *testing.T) {

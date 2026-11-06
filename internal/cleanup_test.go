@@ -81,9 +81,21 @@ func TestClearOrphanOutputs(t *testing.T) {
 	s, repo := newTestService(t)
 	ctx := t.Context()
 	digest := sha256.Sum256([]byte("original"))
-	for _, item := range []struct{ id, name, content string }{
-		{"0123456789abcdef0123456789abcdef", "owned.mp4", "original"},
-		{"1123456789abcdef0123456789abcdef", "changed.mp4", "changed"},
+	for _, item := range []struct {
+		id      string
+		name    string
+		content string
+	}{
+		{
+			id:      "0123456789abcdef0123456789abcdef",
+			name:    "owned.mp4",
+			content: "original",
+		},
+		{
+			id:      "1123456789abcdef0123456789abcdef",
+			name:    "changed.mp4",
+			content: "changed",
+		},
 	} {
 		require.NoError(t, repo.CreateJob(ctx, Job{ID: JobID(item.id), URL: "https://example.com", Title: item.name, DownloadType: DownloadVideo}))
 		require.NoError(t, os.WriteFile(filepath.Join(s.config.DownloadDir, item.name), []byte(item.content), 0o600))

@@ -50,8 +50,26 @@ func TestRepositoryJobRoundTrip(t *testing.T) {
 		name string
 		job  Job
 	}{
-		{"video", Job{ID: "video", URL: "https://example.com/v", Title: "Video", DownloadType: "video", Options: DownloadOptions{Format: "mp4", SubtitleLangs: []string{"en"}}}},
-		{"audio", Job{ID: "audio", URL: "https://example.com/a", Title: "Audio", DownloadType: "audio", Options: DownloadOptions{Format: "mp3"}}},
+		{
+			name: "video",
+			job: Job{
+				ID:           "video",
+				URL:          "https://example.com/v",
+				Title:        "Video",
+				DownloadType: "video",
+				Options:      DownloadOptions{Format: "mp4", SubtitleLangs: []string{"en"}},
+			},
+		},
+		{
+			name: "audio",
+			job: Job{
+				ID:           "audio",
+				URL:          "https://example.com/a",
+				Title:        "Audio",
+				DownloadType: "audio",
+				Options:      DownloadOptions{Format: "mp3"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -67,11 +85,26 @@ func TestRepositoryJobRoundTrip(t *testing.T) {
 }
 
 func TestRepositoryConstraints(t *testing.T) {
-	tests := []struct{ name, query string }{
-		{"invalid status", "INSERT INTO jobs (id, url, title, download_type, status) VALUES ('1', 'url', 'title', 'video', 'bogus')"},
-		{"invalid download type", "INSERT INTO jobs (id, url, title, download_type) VALUES ('1', 'url', 'title', 'bogus')"},
-		{"missing foreign key", "INSERT INTO job_logs (job_id, message) VALUES ('missing', 'hello')"},
-		{"invalid json", "INSERT INTO jobs (id, url, title, download_type, options) VALUES ('1', 'url', 'title', 'video', 'invalid')"},
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{
+			name:  "invalid status",
+			query: "INSERT INTO jobs (id, url, title, download_type, status) VALUES ('1', 'url', 'title', 'video', 'bogus')",
+		},
+		{
+			name:  "invalid download type",
+			query: "INSERT INTO jobs (id, url, title, download_type) VALUES ('1', 'url', 'title', 'bogus')",
+		},
+		{
+			name:  "missing foreign key",
+			query: "INSERT INTO job_logs (job_id, message) VALUES ('missing', 'hello')",
+		},
+		{
+			name:  "invalid json",
+			query: "INSERT INTO jobs (id, url, title, download_type, options) VALUES ('1', 'url', 'title', 'video', 'invalid')",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

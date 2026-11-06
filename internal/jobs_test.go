@@ -71,14 +71,33 @@ func TestCookieFailureIdentifiesSubmittedSite(t *testing.T) {
 
 func TestEnqueueValidation(t *testing.T) {
 	tests := []struct {
-		name, url string
-		kind      DownloadType
-		options   DownloadOptions
+		name    string
+		url     string
+		kind    DownloadType
+		options DownloadOptions
 	}{
-		{"invalid URL", "file:///tmp/video", DownloadVideo, DownloadOptions{}},
-		{"invalid type", "https://example.com", "other", DownloadOptions{}},
-		{"invalid quality", "https://example.com", DownloadVideo, DownloadOptions{Quality: "1]bad"}},
-		{"invalid format", "https://example.com", DownloadAudio, DownloadOptions{Format: "bad"}},
+		{
+			name: "invalid URL",
+			url:  "file:///tmp/video",
+			kind: DownloadVideo,
+		},
+		{
+			name: "invalid type",
+			url:  "https://example.com",
+			kind: "other",
+		},
+		{
+			name:    "invalid quality",
+			url:     "https://example.com",
+			kind:    DownloadVideo,
+			options: DownloadOptions{Quality: "1]bad"},
+		},
+		{
+			name:    "invalid format",
+			url:     "https://example.com",
+			kind:    DownloadAudio,
+			options: DownloadOptions{Format: "bad"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -125,19 +144,25 @@ func TestParseCookiesTXT(t *testing.T) {
 	}{
 		{
 			name: "groups cookies and preserves http-only rows",
-			text: "# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\ta\tone\n" +
-				"#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tb\ttwo\nother.example\tFALSE\t/\tFALSE\t0\tc\tthree\n",
+			text: `# Netscape HTTP Cookie File
+.example.com	TRUE	/	TRUE	0	a	one
+#HttpOnly_.example.com	TRUE	/	TRUE	0	b	two
+other.example	FALSE	/	FALSE	0	c	three
+`,
 			assertResult: func(t *testing.T, cookies Cookies, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, Cookies{
-					".example.com":  ".example.com\tTRUE\t/\tTRUE\t0\ta\tone\n#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tb\ttwo",
+					".example.com": `.example.com	TRUE	/	TRUE	0	a	one
+#HttpOnly_.example.com	TRUE	/	TRUE	0	b	two`,
 					"other.example": "other.example\tFALSE\t/\tFALSE\t0\tc\tthree",
 				}, cookies)
 			},
 		},
 		{
 			name: "skips malformed rows when another row is valid",
-			text: "bad row\n\tTRUE\t/\tTRUE\t0\ta\tb\nexample.com\tFALSE\t/\tFALSE\t0\ta\tb",
+			text: `bad row
+	TRUE	/	TRUE	0	a	b
+example.com	FALSE	/	FALSE	0	a	b`,
 			assertResult: func(t *testing.T, cookies Cookies, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, Cookies{"example.com": "example.com\tFALSE\t/\tFALSE\t0\ta\tb"}, cookies)
@@ -145,7 +170,8 @@ func TestParseCookiesTXT(t *testing.T) {
 		},
 		{
 			name: "rejects input without valid rows",
-			text: "# comment\ninvalid",
+			text: `# comment
+invalid`,
 			assertResult: func(t *testing.T, cookies Cookies, err error) {
 				require.ErrorContains(t, err, "no valid cookies found")
 				assert.Nil(t, cookies)
@@ -162,9 +188,10 @@ func TestParseCookiesTXT(t *testing.T) {
 
 func TestCookiesAreSavedByDomain(t *testing.T) {
 	s, _ := newTestService(t)
-	content := "# Netscape HTTP Cookie File\n" +
-		"#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsession\tsecret\n" +
-		".other.example\tTRUE\t/\tFALSE\t0\tkey\tvalue\n"
+	content := `# Netscape HTTP Cookie File
+#HttpOnly_.example.com	TRUE	/	TRUE	0	session	secret
+.other.example	TRUE	/	FALSE	0	key	value
+`
 	require.NoError(t, s.SaveCookies(t.Context(), content))
 	domains, err := s.Cookies(t.Context())
 	require.NoError(t, err)

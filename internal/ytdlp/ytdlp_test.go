@@ -17,29 +17,87 @@ import (
 )
 
 func TestBinarySource(t *testing.T) {
-	for _, source := range []BinarySource{SourceExternal, SourceManaged, SourceSystem} {
-		assert.NoError(t, source.Validate())
+	for _, tt := range []struct {
+		name     string
+		value    BinarySource
+		expected bool
+	}{
+		{
+			name:     "external",
+			value:    SourceExternal,
+			expected: true,
+		},
+		{
+			name:     "managed",
+			value:    SourceManaged,
+			expected: true,
+		},
+		{
+			name:     "system",
+			value:    SourceSystem,
+			expected: true,
+		},
+		{
+			name:  "invalid",
+			value: "unknown",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.value.Validate() == nil)
+		})
 	}
-	assert.Error(t, BinarySource("unknown").Validate())
+}
+
+func TestBinarySourceJSON(t *testing.T) {
 	data, err := json.Marshal(Info{Source: SourceManaged})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"version":"","source":"managed","can_update":false}`, string(data))
 }
 
 func TestManagerBinary(t *testing.T) {
-	managed := filepath.Join(t.TempDir(), "yt-dlp")
-	manager := NewManager(managed, "")
-	path, source := manager.binary()
-	assert.Equal(t, "yt-dlp", path)
-	assert.Equal(t, SourceSystem, source)
-	require.NoError(t, os.WriteFile(managed, []byte("binary"), 0o600))
-	path, source = manager.binary()
-	assert.Equal(t, managed, path)
-	assert.Equal(t, SourceManaged, source)
-	manager.external = "/external/yt-dlp"
-	path, source = manager.binary()
-	assert.Equal(t, manager.external, path)
-	assert.Equal(t, SourceExternal, source)
+	for _, tt := range []struct {
+		name         string
+		setupMocks   func(t *testing.T, m *Manager)
+		assertResult func(t *testing.T, m *Manager, path string, source BinarySource)
+	}{
+		{
+			name: "system",
+			assertResult: func(t *testing.T, _ *Manager, path string, source BinarySource) {
+				assert.Equal(t, "yt-dlp", path)
+				assert.Equal(t, SourceSystem, source)
+			},
+		},
+		{
+			name: "managed",
+			setupMocks: func(t *testing.T, m *Manager) {
+				require.NoError(t, os.WriteFile(m.managedPath, []byte("binary"), 0o600))
+			},
+			assertResult: func(t *testing.T, m *Manager, path string, source BinarySource) {
+				assert.Equal(t, m.managedPath, path)
+				assert.Equal(t, SourceManaged, source)
+			},
+		},
+		{
+			name: "external takes precedence over managed",
+			setupMocks: func(t *testing.T, m *Manager) {
+				require.NoError(t, os.WriteFile(m.managedPath, []byte("binary"), 0o600))
+				m.external = "/external/yt-dlp"
+			},
+			assertResult: func(t *testing.T, m *Manager, path string, source BinarySource) {
+				assert.Equal(t, m.external, path)
+				assert.Equal(t, SourceExternal, source)
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := NewManager(filepath.Join(t.TempDir(), "yt-dlp"), "")
+			if tt.setupMocks != nil {
+				tt.setupMocks(t, manager)
+			}
+			path, source := manager.binary()
+			tt.assertResult(t, manager, path, source)
+		})
+	}
 }
 
 func TestDownloadArgs(t *testing.T) {
@@ -51,20 +109,68 @@ func TestDownloadArgs(t *testing.T) {
 		"--paths", "/work", "--output", "%(title).180B [%(id)s].%(ext)s",
 	}
 	tests := []struct {
-		name    string
-		request Request
-		options []string
+		name         string
+		request      Request
+		assertResult func(t *testing.T, args []string)
 	}{
-		{"default video", Request{Directory: "/work", URL: "https://example.com", DownloadType: "video"}, []string{"--format", "bestvideo+bestaudio/best"}},
-		{"limited mp4 with subtitles and cookies", Request{Directory: "/work", URL: "https://example.com", DownloadType: "video", Format: "mp4", Quality: "720", SubtitleLangs: []string{"en", "fr"}, CookiesFile: "/work/./cookies.txt"}, []string{"--format", "bestvideo[height<=720]+bestaudio/best[height<=720]", "--merge-output-format", "mp4", "--write-subs", "--write-auto-subs", "--sub-langs", "en,fr", "--cookies", "/work/cookies.txt"}},
-		{"audio", Request{Directory: "/work", URL: "https://example.com", DownloadType: "audio", Format: "mp3"}, []string{"--format", "bestaudio/best", "--extract-audio", "--audio-format", "mp3"}},
+		{
+			name: "default video",
+			request: Request{
+				Directory:    "/work",
+				URL:          "https://example.com",
+				DownloadType: "video",
+			},
+			assertResult: func(t *testing.T, args []string) {
+				want := append([]string{}, base...)
+				want = append(want, "--format", "bestvideo+bestaudio/best", "--", "https://example.com")
+				assert.Equal(t, want, args)
+			},
+		},
+		{
+			name: "limited mp4 with subtitles and cookies",
+			request: Request{
+				Directory:     "/work",
+				URL:           "https://example.com",
+				DownloadType:  "video",
+				Format:        "mp4",
+				Quality:       "720",
+				SubtitleLangs: []string{"en", "fr"},
+				CookiesFile:   "/work/./cookies.txt",
+			},
+			assertResult: func(t *testing.T, args []string) {
+				want := append([]string{}, base...)
+				want = append(want,
+					"--format", "bestvideo[height<=720]+bestaudio/best[height<=720]",
+					"--merge-output-format", "mp4",
+					"--write-subs", "--write-auto-subs", "--sub-langs", "en,fr",
+					"--cookies", "/work/cookies.txt",
+					"--", "https://example.com",
+				)
+				assert.Equal(t, want, args)
+			},
+		},
+		{
+			name: "audio",
+			request: Request{
+				Directory:    "/work",
+				URL:          "https://example.com",
+				DownloadType: "audio",
+				Format:       "mp3",
+			},
+			assertResult: func(t *testing.T, args []string) {
+				want := append([]string{}, base...)
+				want = append(want,
+					"--format", "bestaudio/best",
+					"--extract-audio", "--audio-format", "mp3",
+					"--", "https://example.com",
+				)
+				assert.Equal(t, want, args)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			want := append([]string{}, base...)
-			want = append(want, tt.options...)
-			want = append(want, "--", tt.request.URL)
-			assert.Equal(t, want, downloadArgs(tt.request))
+			tt.assertResult(t, downloadArgs(tt.request))
 		})
 	}
 }
@@ -76,14 +182,43 @@ func TestParseProgress(t *testing.T) {
 		percent float64
 		ok      bool
 	}{
-		{"half", "lemontube-progress:50:100", 50, true},
-		{"clamped above", "lemontube-progress:150:100", 100, true},
-		{"clamped below", "lemontube-progress:-1:100", 0, true},
-		{"zero total", "lemontube-progress:1:0", 0, false},
-		{"invalid value", "lemontube-progress:NA:100", 0, false},
-		{"invalid total", "lemontube-progress:1:NaN", 0, false},
-		{"extra field", "lemontube-progress:1:2:3", 0, false},
-		{"missing prefix", "1:2", 0, false},
+		{
+			name:    "half",
+			line:    "lemontube-progress:50:100",
+			percent: 50,
+			ok:      true,
+		},
+		{
+			name:    "clamped above",
+			line:    "lemontube-progress:150:100",
+			percent: 100,
+			ok:      true,
+		},
+		{
+			name: "clamped below",
+			line: "lemontube-progress:-1:100",
+			ok:   true,
+		},
+		{
+			name: "zero total",
+			line: "lemontube-progress:1:0",
+		},
+		{
+			name: "invalid value",
+			line: "lemontube-progress:NA:100",
+		},
+		{
+			name: "invalid total",
+			line: "lemontube-progress:1:NaN",
+		},
+		{
+			name: "extra field",
+			line: "lemontube-progress:1:2:3",
+		},
+		{
+			name: "missing prefix",
+			line: "1:2",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -101,15 +236,21 @@ func TestDownloadScannerError(t *testing.T) {
 		assertResult func(t *testing.T, err error)
 	}{
 		{
-			name:   "oversized output",
-			script: "#!/bin/sh\nhead -c 1100000 /dev/zero | tr '\\0' x\n",
+			name: "oversized output",
+			script: `#!/bin/sh
+head -c 1100000 /dev/zero | tr '\0' x
+`,
 			assertResult: func(t *testing.T, err error) {
 				require.ErrorContains(t, err, "read yt-dlp output: bufio.Scanner: token too long")
 			},
 		},
 		{
-			name:   "preserves cookie and process errors",
-			script: "#!/bin/sh\nprintf 'ERROR: Use --cookies for authentication.\\n'\nhead -c 1100000 /dev/zero | tr '\\0' x\nexit 7\n",
+			name: "preserves cookie and process errors",
+			script: `#!/bin/sh
+printf 'ERROR: Use --cookies for authentication.\n'
+head -c 1100000 /dev/zero | tr '\0' x
+exit 7
+`,
 			assertResult: func(t *testing.T, err error) {
 				require.ErrorContains(t, err, "read yt-dlp output: bufio.Scanner: token too long")
 				require.ErrorIs(t, err, ErrCookies)
@@ -286,40 +427,62 @@ func TestAudioDownloadEmbedsMetadata(t *testing.T) {
 }
 
 func TestManagerUpdate(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("#!/bin/sh\nprintf '2026.11.05\\n'\n"))
-	}))
-	t.Cleanup(server.Close)
-	manager := NewManager(filepath.Join(t.TempDir(), "bin", "yt-dlp"), "")
-	manager.baseURL = server.URL + "/"
-	info, err := manager.Update(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, "2026.11.05", info.Version)
-	assert.Equal(t, SourceManaged, info.Source)
-	assert.True(t, info.CanUpdate)
-	got, err := manager.Version(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, info, got)
-}
-
-func TestManagerRejectsExternalUpdate(t *testing.T) {
-	manager := NewManager(filepath.Join(t.TempDir(), "managed"), "/external/yt-dlp")
-	_, err := manager.Update(t.Context())
-	require.ErrorContains(t, err, "externally managed")
-}
-
-func TestFailedUpdatePreservesExistingBinary(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("not an executable"))
-	}))
-	t.Cleanup(server.Close)
-	path := filepath.Join(t.TempDir(), "yt-dlp")
-	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nprintf 'old-version\\n'\n"), 0o755))
-	manager := NewManager(path, "")
-	manager.baseURL = server.URL + "/"
-	_, err := manager.Update(t.Context())
-	require.Error(t, err)
-	info, err := manager.Version(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, "old-version", info.Version)
+	serveBinary := func(t *testing.T, m *Manager, binary string) {
+		t.Helper()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(binary))
+		}))
+		t.Cleanup(server.Close)
+		m.baseURL = server.URL + "/"
+	}
+	for _, tt := range []struct {
+		name         string
+		setupMocks   func(t *testing.T, m *Manager)
+		assertResult func(t *testing.T, m *Manager, info Info, err error)
+	}{
+		{
+			name: "updates managed binary",
+			setupMocks: func(t *testing.T, m *Manager) {
+				serveBinary(t, m, "#!/bin/sh\nprintf '2026.11.05\\n'\n")
+			},
+			assertResult: func(t *testing.T, m *Manager, info Info, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "2026.11.05", info.Version)
+				assert.Equal(t, SourceManaged, info.Source)
+				assert.True(t, info.CanUpdate)
+				got, err := m.Version(t.Context())
+				require.NoError(t, err)
+				assert.Equal(t, info, got)
+			},
+		},
+		{
+			name: "rejects external binary",
+			setupMocks: func(t *testing.T, m *Manager) {
+				m.external = "/external/yt-dlp"
+			},
+			assertResult: func(t *testing.T, _ *Manager, _ Info, err error) {
+				require.ErrorContains(t, err, "externally managed")
+			},
+		},
+		{
+			name: "failed update preserves existing binary",
+			setupMocks: func(t *testing.T, m *Manager) {
+				require.NoError(t, os.WriteFile(m.managedPath, []byte("#!/bin/sh\nprintf 'old-version\\n'\n"), 0o755))
+				serveBinary(t, m, "not an executable")
+			},
+			assertResult: func(t *testing.T, m *Manager, _ Info, err error) {
+				require.Error(t, err)
+				info, err := m.Version(t.Context())
+				require.NoError(t, err)
+				assert.Equal(t, "old-version", info.Version)
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := NewManager(filepath.Join(t.TempDir(), "yt-dlp"), "")
+			tt.setupMocks(t, manager)
+			info, err := manager.Update(t.Context())
+			tt.assertResult(t, manager, info, err)
+		})
+	}
 }
