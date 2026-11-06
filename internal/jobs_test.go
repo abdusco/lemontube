@@ -29,7 +29,11 @@ func TestServiceRunsAndCleansJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, s.Start(ctx))
 	t.Cleanup(func() { cancel(); s.Wait() })
-	id, err := s.Enqueue(t.Context(), "https://example.com/video", DownloadVideo, DownloadOptions{Format: "mp4", Quality: "best"})
+	id, err := s.Enqueue(t.Context(), EnqueueParams{
+		URL:          "https://example.com/video",
+		DownloadType: DownloadVideo,
+		Options:      DownloadOptions{Format: "mp4", Quality: "best"},
+	})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		job, err := repo.GetJob(t.Context(), id)
@@ -57,7 +61,10 @@ func TestCookieFailureIdentifiesSubmittedSite(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, s.Start(ctx))
 	t.Cleanup(func() { cancel(); s.Wait() })
-	id, err := s.Enqueue(t.Context(), "https://video.example.com:8443/watch?token=secret", DownloadVideo, DownloadOptions{})
+	id, err := s.Enqueue(t.Context(), EnqueueParams{
+		URL:          "https://video.example.com:8443/watch?token=secret",
+		DownloadType: DownloadVideo,
+	})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		job, err := repo.GetJob(t.Context(), id)
@@ -102,10 +109,26 @@ func TestEnqueueValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, _ := newTestService(t)
-			_, err := s.Enqueue(t.Context(), tt.url, tt.kind, tt.options)
+			params := EnqueueParams{URL: tt.url, DownloadType: tt.kind, Options: tt.options}
+			require.Error(t, params.Validate())
+			_, err := s.Enqueue(t.Context(), params)
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestEnqueueDefaults(t *testing.T) {
+	s, repo := newTestService(t)
+	params := EnqueueParams{
+		URL:          "https://example.com/video",
+		DownloadType: DownloadVideo,
+	}
+	require.NoError(t, params.Validate())
+	id, err := s.Enqueue(t.Context(), params)
+	require.NoError(t, err)
+	job, err := repo.GetJob(t.Context(), id)
+	require.NoError(t, err)
+	assert.Equal(t, DownloadOptions{Format: "mp4", Quality: "best"}, job.Options)
 }
 
 func TestDeleteRunningJobCleansWorkspace(t *testing.T) {
@@ -121,7 +144,10 @@ func TestDeleteRunningJobCleansWorkspace(t *testing.T) {
 		cancel()
 		s.Wait()
 	})
-	id, err := s.Enqueue(t.Context(), "https://example.com/video", DownloadVideo, DownloadOptions{})
+	id, err := s.Enqueue(t.Context(), EnqueueParams{
+		URL:          "https://example.com/video",
+		DownloadType: DownloadVideo,
+	})
 	require.NoError(t, err)
 	workspace := filepath.Join(s.config.TempDir, ".lemontube", string(id))
 	require.Eventually(t, func() bool {

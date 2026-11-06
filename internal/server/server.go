@@ -81,7 +81,11 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 		}
 
-		id, err := service.Enqueue(c.Request().Context(), request.URL, request.DownloadType, request.Options)
+		id, err := service.Enqueue(c.Request().Context(), internal.EnqueueParams{
+			URL:          request.URL,
+			DownloadType: request.DownloadType,
+			Options:      request.Options,
+		})
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}

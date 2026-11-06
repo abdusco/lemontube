@@ -66,12 +66,26 @@ func (s *Service) signal() {
 	}
 }
 
-func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType DownloadType, options DownloadOptions) (JobID, error) {
-	u, err := url.Parse(rawURL)
+type EnqueueParams struct {
+	URL          string
+	DownloadType DownloadType
+	Options      DownloadOptions
+}
+
+func (p EnqueueParams) Validate() error {
+	u, err := url.Parse(p.URL)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-		return "", errors.New("a valid HTTP(S) URL is required")
+		return errors.New("a valid HTTP(S) URL is required")
 	}
-	options, err = options.Normalize(downloadType)
+	_, err = p.Options.Normalize(p.DownloadType)
+	return err
+}
+
+func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (JobID, error) {
+	if err := params.Validate(); err != nil {
+		return "", err
+	}
+	options, err := params.Options.Normalize(params.DownloadType)
 	if err != nil {
 		return "", err
 	}
@@ -81,9 +95,9 @@ func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType Downl
 	}
 	job := Job{
 		ID:           id,
-		URL:          rawURL,
-		Title:        rawURL,
-		DownloadType: downloadType,
+		URL:          params.URL,
+		Title:        params.URL,
+		DownloadType: params.DownloadType,
 		Options:      options,
 	}
 	if err := s.repo.CreateJob(ctx, job); err != nil {
@@ -293,7 +307,11 @@ func (s *Service) Retry(ctx context.Context, id JobID) (JobID, error) {
 	if job.Status.IsActive() {
 		return "", errors.New("job is still active")
 	}
-	return s.Enqueue(ctx, job.URL, job.DownloadType, job.Options)
+	return s.Enqueue(ctx, EnqueueParams{
+		URL:          job.URL,
+		DownloadType: job.DownloadType,
+		Options:      job.Options,
+	})
 }
 
 func (s *Service) Cookies(ctx context.Context) ([]string, error) {
