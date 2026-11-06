@@ -30,7 +30,7 @@
           </section>
           <section class="menu-section" aria-labelledby="menu-cleanup">
             <h3 id="menu-cleanup">Removed downloads</h3>
-            <p>Clear unchanged files from jobs removed after this feature was added. Untracked or changed files are kept.</p>
+            <p>Clear unchanged files from removed jobs. Untracked or changed files are kept.</p>
             <button type="button" class="secondary" @click="clearOrphans" :disabled="clearingOrphans">Clear orphaned files</button>
             <p class="cookie-status" x-text="orphanMessage" aria-live="polite"></p>
           </section>

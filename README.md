@@ -20,7 +20,7 @@ Saved domains are listed individually, so you can remove cookies for one site or
 
 ## Managing downloads
 
-Removing a download from the list **keeps its files by default**. Open the settings menu and select **Clear orphaned files** to delete unchanged files from downloads removed since this feature was added. Files LemonTube can't identify or that have changed are left alone. Existing files are never overwritten.
+Removing a download from the list **keeps its files by default**. Open the settings menu and select **Clear orphaned files** to delete unchanged files from removed downloads. Files LemonTube can't identify or that have changed are left alone. Existing files are never overwritten.
 
 The settings menu also lets you update yt-dlp when downloads stop working. Running downloads are not interrupted.
 
