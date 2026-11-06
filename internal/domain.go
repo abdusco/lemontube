@@ -86,14 +86,46 @@ func (o DownloadOptions) Normalize(kind DownloadType) (DownloadOptions, error) {
 	return o, nil
 }
 
+type OutputKind string
+
+const (
+	OutputMedia    OutputKind = "media"
+	OutputSubtitle OutputKind = "subtitle"
+)
+
+func (k OutputKind) Validate() error {
+	switch k {
+	case OutputMedia, OutputSubtitle:
+		return nil
+	default:
+		return fmt.Errorf("invalid output kind %q", k)
+	}
+}
+
+type OutputState string
+
+const (
+	OutputPublishing OutputState = "publishing"
+	OutputPublished  OutputState = "published"
+)
+
+func (s OutputState) Validate() error {
+	switch s {
+	case OutputPublishing, OutputPublished:
+		return nil
+	default:
+		return fmt.Errorf("invalid output state %q", s)
+	}
+}
+
 type OutputFile struct {
-	Path     string  `json:"path"`
-	Kind     string  `json:"kind"`
-	State    string  `json:"state"`
-	Size     *int64  `json:"size,omitempty"`
-	Language *string `json:"language,omitempty"`
-	Stage    string  `json:"stage,omitempty"`
-	SHA256   string  `json:"sha256,omitempty"`
+	Path     string      `json:"path"`
+	Kind     OutputKind  `json:"kind"`
+	State    OutputState `json:"state"`
+	Size     *int64      `json:"size,omitempty"`
+	Language *string     `json:"language,omitempty"`
+	Stage    string      `json:"stage,omitempty"`
+	SHA256   string      `json:"sha256,omitempty"`
 }
 
 type Job struct {

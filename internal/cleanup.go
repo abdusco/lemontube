@@ -60,15 +60,15 @@ func (s *Service) publish(ctx context.Context, id, workspace string) error {
 				return err
 			}
 		}
-		kind := "media"
+		kind := OutputMedia
 		switch strings.ToLower(filepath.Ext(name)) {
 		case ".vtt", ".srt", ".ass", ".ttml":
-			kind = "subtitle"
+			kind = OutputSubtitle
 		}
 		outputs = append(outputs, OutputFile{
 			Path:  destination,
 			Kind:  kind,
-			State: "publishing",
+			State: OutputPublishing,
 			Stage: stage,
 		})
 		if err := s.repo.SetOutputs(ctx, id, outputs); err != nil {
@@ -114,7 +114,7 @@ func (s *Service) publish(ctx context.Context, id, workspace string) error {
 				return err
 			}
 		}
-		outputs[index].State = "published"
+		outputs[index].State = OutputPublished
 		if err := s.repo.SetOutputs(ctx, id, outputs); err != nil {
 			return err
 		}
@@ -262,10 +262,10 @@ func (s *Service) reconcile(ctx context.Context, job *Job) error {
 		if !stageInfo.Mode().IsRegular() {
 			return errors.New("invalid staging file")
 		}
-		if item.State == "publishing" {
+		if item.State == OutputPublishing {
 			finalInfo, err := os.Lstat(final)
 			if err == nil && os.SameFile(stageInfo, finalInfo) {
-				item.State = "published"
+				item.State = OutputPublished
 				changed = true
 			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
@@ -286,7 +286,7 @@ func (s *Service) reconcile(ctx context.Context, job *Job) error {
 
 func (s *Service) deleteOutputs(outputs []OutputFile) error {
 	for _, item := range outputs {
-		if item.State != "published" {
+		if item.State != OutputPublished {
 			continue
 		}
 		if item.Path == "." || filepath.Base(item.Path) != item.Path || item.SHA256 == "" {

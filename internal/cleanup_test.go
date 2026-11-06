@@ -36,7 +36,7 @@ func TestPublishAvoidsCollisionsAndTracksFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, job.Outputs, 1)
 	assert.Equal(t, "video (1).mp4", job.Outputs[0].Path)
-	assert.Equal(t, "published", job.Outputs[0].State)
+	assert.Equal(t, OutputPublished, job.Outputs[0].State)
 	data, err := os.ReadFile(filepath.Join(s.config.DownloadDir, "video.mp4"))
 	require.NoError(t, err)
 	assert.Equal(t, "existing", string(data))
@@ -119,7 +119,7 @@ func TestReconcilePublishedHardLink(t *testing.T) {
 	require.NoError(t, s.reconcile(t.Context(), &job))
 	got, err := repo.GetJob(t.Context(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "published", got.Outputs[0].State)
+	assert.Equal(t, OutputPublished, got.Outputs[0].State)
 	assert.NoFileExists(t, filepath.Join(s.config.DownloadDir, stage))
 	assert.FileExists(t, filepath.Join(s.config.DownloadDir, "video.mp4"))
 }

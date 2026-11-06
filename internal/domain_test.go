@@ -1,11 +1,31 @@
 package internal
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestOutputEnums(t *testing.T) {
+	for _, kind := range []OutputKind{OutputMedia, OutputSubtitle} {
+		assert.NoError(t, kind.Validate())
+	}
+	assert.Error(t, OutputKind("unknown").Validate())
+	for _, state := range []OutputState{OutputPublishing, OutputPublished} {
+		assert.NoError(t, state.Validate())
+	}
+	assert.Error(t, OutputState("unknown").Validate())
+
+	output := OutputFile{Path: "video.mp4", Kind: OutputMedia, State: OutputPublished}
+	data, err := json.Marshal(output)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"path":"video.mp4","kind":"media","state":"published"}`, string(data))
+	var decoded OutputFile
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, output, decoded)
+}
 
 func TestDownloadOptionsNormalize(t *testing.T) {
 	tests := []struct {

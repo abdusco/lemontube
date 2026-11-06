@@ -347,7 +347,7 @@ func (s *Service) DownloadPath(ctx context.Context, name string) (string, error)
 	}
 	for _, job := range jobs {
 		for _, output := range job.Outputs {
-			if output.Path != name || output.State != "published" {
+			if output.Path != name || output.State != OutputPublished {
 				continue
 			}
 			path := filepath.Join(s.config.DownloadDir, name)
