@@ -88,13 +88,6 @@ func (a *authentication) registerRoutes(e *echo.Echo, loginLimit echo.Middleware
 	}, noStore, a.requireAPIAuth)
 }
 
-func noStore(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		c.Response().Header().Set("Cache-Control", "no-store")
-		return next(c)
-	}
-}
-
 func (a *authentication) allowed(username, password string) bool {
 	userHash := sha256.Sum256([]byte(username))
 	passwordHash := sha256.Sum256([]byte(password))

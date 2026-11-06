@@ -131,12 +131,9 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 		return c.File(path)
 	})
 	static := http.FileServer(http.FS(assets))
-	serveStatic := echo.WrapHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache")
-		static.ServeHTTP(w, r)
-	}))
-	e.GET("/styles.css", serveStatic)
-	protected.GET("/", serveStatic)
-	protected.GET("/*", serveStatic)
+	serveStatic := echo.WrapHandler(static)
+	e.GET("/styles.css", serveStatic, noCache)
+	protected.GET("/", serveStatic, noCache)
+	protected.GET("/*", serveStatic, noCache)
 	return e
 }
