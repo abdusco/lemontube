@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"time"
 
 	"lemontube/internal"
@@ -159,7 +160,15 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	})
 
 	protected.GET("/download/:name", func(c echo.Context) error {
-		path, err := service.DownloadPath(c.Request().Context(), c.Param("name"))
+		name := c.Param("name")
+		if c.Request().URL.RawPath != "" {
+			var err error
+			name, err = url.PathUnescape(name)
+			if err != nil {
+				return echo.ErrNotFound
+			}
+		}
+		path, err := service.DownloadPath(c.Request().Context(), name)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return echo.ErrNotFound
