@@ -290,7 +290,7 @@ func (s *Service) Retry(ctx context.Context, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if job.Status == JobQueued || job.Status == JobRunning {
+	if job.Status.IsActive() {
 		return "", errors.New("job is still active")
 	}
 	return s.Enqueue(ctx, job.URL, job.DownloadType, job.Options)

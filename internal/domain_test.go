@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestJobStatusIsActive(t *testing.T) {
+	for _, status := range []JobStatus{JobQueued, JobRunning} {
+		assert.True(t, status.IsActive(), "%s", status)
+	}
+	for _, status := range []JobStatus{JobFinished, JobFailed, JobCanceled, "invalid"} {
+		assert.False(t, status.IsActive(), "%s", status)
+	}
+}
+
 func TestJobID(t *testing.T) {
 	id, err := NewJobID()
 	require.NoError(t, err)

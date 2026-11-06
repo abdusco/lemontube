@@ -95,6 +95,10 @@ func (s JobStatus) Validate() error {
 	}
 }
 
+func (s JobStatus) IsActive() bool {
+	return s == JobQueued || s == JobRunning
+}
+
 type DownloadType string
 
 const (
