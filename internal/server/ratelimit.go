@@ -16,14 +16,17 @@ func rateLimit(limit int, window time.Duration) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			mutex.Lock()
 			now := time.Now()
+
 			if !now.Before(resetAt) {
 				count = 0
 				resetAt = now.Add(window)
 			}
+
 			if count >= limit {
 				mutex.Unlock()
 				return echo.NewHTTPError(http.StatusTooManyRequests, "Too many requests. Try again later.")
 			}
+
 			count++
 			mutex.Unlock()
 			return next(c)
