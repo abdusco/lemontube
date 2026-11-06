@@ -78,52 +78,61 @@ func Download(ctx context.Context, binary string, request Request) error {
 	cmd.WaitDelay = 5 * time.Second
 	reader, writer := io.Pipe()
 	cmd.Stdout, cmd.Stderr = writer, writer
-	done := make(chan struct{})
-	cookieProblem := false
+	type scanResult struct {
+		cookieProblem bool
+		err           error
+	}
+	done := make(chan scanResult, 1)
 	go func() {
-		defer close(done)
 		defer reader.Close()
 		scanner := bufio.NewScanner(reader)
 		scanner.Buffer(make([]byte, 4096), 1024*1024)
+		cookieProblem := false
 		for scanner.Scan() {
-			if isCookieProblem(scanner.Text()) {
+			line := scanner.Text()
+			if isCookieProblem(line) {
 				cookieProblem = true
 			}
-			if strings.HasPrefix(scanner.Text(), "lemontube-title:") {
+			if title, ok := strings.CutPrefix(line, "lemontube-title:"); ok {
 				if request.Title != nil {
-					request.Title(strings.TrimPrefix(scanner.Text(), "lemontube-title:"))
+					request.Title(title)
 				}
 				continue
 			}
-			if strings.HasPrefix(scanner.Text(), "lemontube-progress:") {
-				if percent, ok := parseProgress(scanner.Text()); ok && request.Progress != nil {
+			if strings.HasPrefix(line, "lemontube-progress:") {
+				if percent, ok := parseProgress(line); ok && request.Progress != nil {
 					request.Progress(percent)
 				}
 				continue
 			}
 			if request.Log != nil {
-				request.Log(scanner.Text())
+				request.Log(line)
 			}
 		}
+		done <- scanResult{cookieProblem: cookieProblem, err: scanner.Err()}
 	}()
 	err := cmd.Run()
 	writer.Close()
-	<-done
-	reader.Close()
+	result := <-done
 	if err != nil {
-		if ctx.Err() == nil && cookieProblem {
-			return fmt.Errorf("%w: %w", ErrCookies, err)
+		if ctx.Err() == nil && result.cookieProblem {
+			err = fmt.Errorf("%w: %w", ErrCookies, err)
+		} else {
+			err = fmt.Errorf("yt-dlp: %w", err)
 		}
-		return fmt.Errorf("yt-dlp: %w", err)
 	}
-	return nil
+	if result.err != nil {
+		return errors.Join(err, fmt.Errorf("read yt-dlp output: %w", result.err))
+	}
+	return err
 }
 
 func parseProgress(line string) (float64, bool) {
-	if !strings.HasPrefix(line, "lemontube-progress:") {
+	progress, ok := strings.CutPrefix(line, "lemontube-progress:")
+	if !ok {
 		return 0, false
 	}
-	parts := strings.Split(strings.TrimPrefix(line, "lemontube-progress:"), ":")
+	parts := strings.Split(progress, ":")
 	if len(parts) != 2 {
 		return 0, false
 	}

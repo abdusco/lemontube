@@ -94,6 +94,40 @@ func TestParseProgress(t *testing.T) {
 	}
 }
 
+func TestDownloadScannerError(t *testing.T) {
+	tests := []struct {
+		name         string
+		script       string
+		assertResult func(t *testing.T, err error)
+	}{
+		{
+			name:   "oversized output",
+			script: "#!/bin/sh\nhead -c 1100000 /dev/zero | tr '\\0' x\n",
+			assertResult: func(t *testing.T, err error) {
+				require.ErrorContains(t, err, "read yt-dlp output: bufio.Scanner: token too long")
+			},
+		},
+		{
+			name:   "preserves cookie and process errors",
+			script: "#!/bin/sh\nprintf 'ERROR: Use --cookies for authentication.\\n'\nhead -c 1100000 /dev/zero | tr '\\0' x\nexit 7\n",
+			assertResult: func(t *testing.T, err error) {
+				require.ErrorContains(t, err, "read yt-dlp output: bufio.Scanner: token too long")
+				require.ErrorIs(t, err, ErrCookies)
+				var exitErr *exec.ExitError
+				require.ErrorAs(t, err, &exitErr)
+				assert.Equal(t, 7, exitErr.ExitCode())
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binary := filepath.Join(t.TempDir(), "yt-dlp")
+			require.NoError(t, os.WriteFile(binary, []byte(tt.script), 0o755))
+			tt.assertResult(t, Download(t.Context(), binary, Request{}))
+		})
+	}
+}
+
 func TestDownloadCookieErrors(t *testing.T) {
 	tests := []struct {
 		name         string
