@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -75,38 +74,9 @@ func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType Downl
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return "", errors.New("a valid HTTP(S) URL is required")
 	}
-	if err := downloadType.Validate(); err != nil {
+	options, err = options.Normalize(downloadType)
+	if err != nil {
 		return "", err
-	}
-	if options.Format == "" {
-		if downloadType == DownloadAudio {
-			options.Format = "mp3"
-		} else {
-			options.Format = "mp4"
-		}
-	}
-	if downloadType == "audio" {
-		switch options.Format {
-		case "mp3", "m4a", "opus", "wav", "flac":
-		default:
-			return "", errors.New("invalid audio format")
-		}
-	} else if options.Format != "mp4" && options.Format != "any" {
-		return "", errors.New("invalid video format")
-	}
-	if options.Quality == "" {
-		options.Quality = "best"
-	}
-	if options.Quality != "best" {
-		quality, err := strconv.Atoi(options.Quality)
-		if err != nil || quality < 1 || quality > 10000 {
-			return "", errors.New("invalid quality")
-		}
-	}
-	for _, lang := range options.SubtitleLangs {
-		if lang == "" || strings.ContainsAny(lang, ",/\\ \n\r") {
-			return "", errors.New("invalid subtitle language")
-		}
 	}
 	var random [16]byte
 	if _, err := rand.Read(random[:]); err != nil {

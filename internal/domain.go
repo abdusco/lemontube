@@ -1,6 +1,11 @@
 package internal
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 type JobStatus string
 
@@ -42,6 +47,43 @@ type DownloadOptions struct {
 	Format        string   `json:"format"`
 	Quality       string   `json:"quality"`
 	SubtitleLangs []string `json:"subtitle_langs"`
+}
+
+func (o DownloadOptions) Normalize(kind DownloadType) (DownloadOptions, error) {
+	if err := kind.Validate(); err != nil {
+		return o, err
+	}
+	if o.Format == "" {
+		if kind == DownloadAudio {
+			o.Format = "mp3"
+		} else {
+			o.Format = "mp4"
+		}
+	}
+	if kind == DownloadAudio {
+		switch o.Format {
+		case "mp3", "m4a", "opus", "wav", "flac":
+		default:
+			return o, errors.New("invalid audio format")
+		}
+	} else if o.Format != "mp4" && o.Format != "any" {
+		return o, errors.New("invalid video format")
+	}
+	if o.Quality == "" {
+		o.Quality = "best"
+	}
+	if o.Quality != "best" {
+		quality, err := strconv.Atoi(o.Quality)
+		if err != nil || quality < 1 || quality > 10000 {
+			return o, errors.New("invalid quality")
+		}
+	}
+	for _, lang := range o.SubtitleLangs {
+		if lang == "" || strings.ContainsAny(lang, ",/\\ \n\r") {
+			return o, errors.New("invalid subtitle language")
+		}
+	}
+	return o, nil
 }
 
 type OutputFile struct {
