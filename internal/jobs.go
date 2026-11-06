@@ -170,58 +170,7 @@ func (s *Service) run(ctx context.Context, job Job) {
 		s.signal()
 	}()
 	workspace := filepath.Join(s.config.TempDir, ".lemontube", job.ID)
-	err := os.Mkdir(workspace, 0o700)
-	if err == nil {
-		_, cookies, cookieErr := s.repo.Cookies(ctx)
-		if cookieErr != nil {
-			err = cookieErr
-		}
-		cookieFile := ""
-		if cookieErr == nil && strings.TrimSpace(cookies) != "# Netscape HTTP Cookie File" {
-			cookieFile = filepath.Join(workspace, ".cookies.txt")
-			err = os.WriteFile(cookieFile, []byte(cookies), 0o600)
-		}
-		if err == nil {
-			lastPercent := -1
-			titleSet := false
-			err = s.ytdlp.Download(ctx, ytdlp.Request{
-				URL:           job.URL,
-				Directory:     workspace,
-				DownloadType:  string(job.DownloadType),
-				Format:        job.Options.Format,
-				Quality:       job.Options.Quality,
-				SubtitleLangs: job.Options.SubtitleLangs,
-				CookiesFile:   cookieFile,
-				Title: func(title string) {
-					if titleSet || title == "" {
-						return
-					}
-					titleSet = true
-					if err := s.repo.SetTitle(context.Background(), job.ID, title); err != nil {
-						s.logger.Warn("save title", "error", err)
-					}
-				},
-				Progress: func(percent float64) {
-					whole := int(percent)
-					if whole == lastPercent {
-						return
-					}
-					lastPercent = whole
-					if err := s.repo.SetProgress(context.Background(), job.ID, percent); err != nil {
-						s.logger.Warn("save progress", "error", err)
-					}
-				},
-				Log: func(line string) {
-					if err := s.repo.AddLog(context.Background(), job.ID, line); err != nil {
-						s.logger.Warn("save log", "error", err)
-					}
-				},
-			})
-		}
-	}
-	if err == nil {
-		err = s.publish(ctx, job.ID, workspace)
-	}
+	err := s.executeJob(ctx, job, workspace)
 	status := JobFinished
 	var message *string
 	if err != nil {
@@ -244,6 +193,65 @@ func (s *Service) run(ctx context.Context, job Job) {
 	if err := os.RemoveAll(workspace); err != nil {
 		s.logger.Warn("remove workspace", "job", job.ID, "error", err)
 	}
+}
+
+func (s *Service) executeJob(ctx context.Context, job Job, workspace string) error {
+	if err := os.Mkdir(workspace, 0o700); err != nil {
+		return fmt.Errorf("create workspace: %w", err)
+	}
+	_, cookies, err := s.repo.Cookies(ctx)
+	if err != nil {
+		return fmt.Errorf("load cookies: %w", err)
+	}
+	cookieFile := ""
+	if strings.TrimSpace(cookies) != "# Netscape HTTP Cookie File" {
+		cookieFile = filepath.Join(workspace, ".cookies.txt")
+		if err := os.WriteFile(cookieFile, []byte(cookies), 0o600); err != nil {
+			return fmt.Errorf("write cookies file: %w", err)
+		}
+	}
+	lastPercent := -1
+	titleSet := false
+	err = s.ytdlp.Download(ctx, ytdlp.Request{
+		URL:           job.URL,
+		Directory:     workspace,
+		DownloadType:  string(job.DownloadType),
+		Format:        job.Options.Format,
+		Quality:       job.Options.Quality,
+		SubtitleLangs: job.Options.SubtitleLangs,
+		CookiesFile:   cookieFile,
+		Title: func(title string) {
+			if titleSet || title == "" {
+				return
+			}
+			titleSet = true
+			if err := s.repo.SetTitle(context.Background(), job.ID, title); err != nil {
+				s.logger.Warn("save title", "error", err)
+			}
+		},
+		Progress: func(percent float64) {
+			whole := int(percent)
+			if whole == lastPercent {
+				return
+			}
+			lastPercent = whole
+			if err := s.repo.SetProgress(context.Background(), job.ID, percent); err != nil {
+				s.logger.Warn("save progress", "error", err)
+			}
+		},
+		Log: func(line string) {
+			if err := s.repo.AddLog(context.Background(), job.ID, line); err != nil {
+				s.logger.Warn("save log", "error", err)
+			}
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
+	if err := s.publish(ctx, job.ID, workspace); err != nil {
+		return fmt.Errorf("publish outputs: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {

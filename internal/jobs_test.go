@@ -12,6 +12,13 @@ import (
 	"lemontube/internal/ytdlp"
 )
 
+func TestExecuteJobWorkspaceError(t *testing.T) {
+	s := &Service{}
+	err := s.executeJob(t.Context(), Job{}, t.TempDir())
+	require.ErrorContains(t, err, "create workspace")
+	require.ErrorIs(t, err, os.ErrExist)
+}
+
 func TestServiceRunsAndCleansJob(t *testing.T) {
 	s, repo := newTestService(t)
 	binary := filepath.Join(t.TempDir(), "fake-ytdlp")
