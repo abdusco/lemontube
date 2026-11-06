@@ -146,9 +146,9 @@ func (s *Service) sweep(ctx context.Context) error {
 		if job.CleanupAfter != nil && *job.CleanupAfter > now() {
 			continue
 		}
-		s.mutex.Lock()
+		s.mutex.RLock()
 		_, running := s.running[job.ID]
-		s.mutex.Unlock()
+		s.mutex.RUnlock()
 		if running || job.Status == JobRunning || (job.Status == JobQueued && job.DeleteRequestedAt == nil) {
 			continue
 		}

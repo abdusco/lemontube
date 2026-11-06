@@ -32,7 +32,7 @@ type Service struct {
 	repo        *Repository
 	config      Config
 	logger      *slog.Logger
-	mutex       sync.Mutex
+	mutex       sync.RWMutex
 	orphanMutex sync.Mutex
 	running     map[string]context.CancelFunc
 	wg          sync.WaitGroup
@@ -254,11 +254,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if !found {
 		return fmt.Errorf("job not found")
 	}
-	s.mutex.Lock()
+	s.mutex.RLock()
 	if cancel := s.running[id]; cancel != nil {
 		cancel()
 	}
-	s.mutex.Unlock()
+	s.mutex.RUnlock()
 	s.signal()
 	return nil
 }

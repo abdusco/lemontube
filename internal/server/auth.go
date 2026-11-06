@@ -58,7 +58,7 @@ func ParseAuthUsers(value string) ([]AuthUser, error) {
 type authentication struct {
 	users     []AuthUser
 	loginPage func() ([]byte, error)
-	mutex     sync.Mutex
+	mutex     sync.RWMutex
 	sessions  map[string]time.Time
 }
 
@@ -124,7 +124,6 @@ func (a *authentication) login(c echo.Context) error {
 		if user.MatchesCredentials(username, password) {
 			authenticated = true
 		}
-
 	}
 
 	if !authenticated {
@@ -142,7 +141,6 @@ func (a *authentication) login(c echo.Context) error {
 		if now.After(expires) {
 			delete(a.sessions, key)
 		}
-
 	}
 
 	value := base64.RawURLEncoding.EncodeToString(token[:])
@@ -176,11 +174,15 @@ func (a *authentication) authenticated(r *http.Request) bool {
 		return false
 	}
 
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.mutex.RLock()
 	expires, ok := a.sessions[cookie.Value]
+	a.mutex.RUnlock()
 	if ok && time.Now().After(expires) {
-		delete(a.sessions, cookie.Value)
+		a.mutex.Lock()
+		if current, exists := a.sessions[cookie.Value]; exists && current == expires {
+			delete(a.sessions, cookie.Value)
+		}
+		a.mutex.Unlock()
 		return false
 	}
 

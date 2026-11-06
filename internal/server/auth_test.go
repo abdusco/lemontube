@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestConcurrentSessionChecks(t *testing.T) {
+	auth := newAuthentication(authenticationParams{})
+	auth.sessions["valid"] = time.Now().Add(time.Hour)
+	auth.sessions["expired"] = time.Now().Add(-time.Hour)
+	var wg sync.WaitGroup
+	for _, token := range []string{"valid", "expired", "missing"} {
+		for range 20 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
+				assert.Equal(t, token == "valid", auth.authenticated(req))
+			}()
+		}
+	}
+	wg.Wait()
+	assert.NotContains(t, auth.sessions, "expired")
+}
 
 func TestAuthenticationLoginPage(t *testing.T) {
 	users, err := ParseAuthUsers(`["alice:secret"]`)
