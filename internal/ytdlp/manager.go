@@ -17,6 +17,23 @@ import (
 
 const nightlyURL = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/"
 
+type BinarySource string
+
+const (
+	SourceExternal BinarySource = "external"
+	SourceManaged  BinarySource = "managed"
+	SourceSystem   BinarySource = "system"
+)
+
+func (s BinarySource) Validate() error {
+	switch s {
+	case SourceExternal, SourceManaged, SourceSystem:
+		return nil
+	default:
+		return fmt.Errorf("invalid binary source %q", s)
+	}
+}
+
 // Manager coordinates downloads with updates to a persistent standalone binary.
 type Manager struct {
 	managedPath string
@@ -27,9 +44,9 @@ type Manager struct {
 }
 
 type Info struct {
-	Version   string `json:"version"`
-	Source    string `json:"source"`
-	CanUpdate bool   `json:"can_update"`
+	Version   string       `json:"version"`
+	Source    BinarySource `json:"source"`
+	CanUpdate bool         `json:"can_update"`
 }
 
 func NewManager(managedPath, external string) *Manager {
@@ -41,14 +58,14 @@ func NewManager(managedPath, external string) *Manager {
 	}
 }
 
-func (m *Manager) binary() (string, string) {
+func (m *Manager) binary() (string, BinarySource) {
 	if m.external != "" {
-		return m.external, "external"
+		return m.external, SourceExternal
 	}
 	if info, err := os.Stat(m.managedPath); err == nil && info.Mode().IsRegular() {
-		return m.managedPath, "managed"
+		return m.managedPath, SourceManaged
 	}
-	return "yt-dlp", "system"
+	return "yt-dlp", SourceSystem
 }
 
 func (m *Manager) Version(ctx context.Context) (Info, error) {
@@ -129,7 +146,7 @@ func (m *Manager) Update(ctx context.Context) (Info, error) {
 	if err := os.Rename(file.Name(), m.managedPath); err != nil {
 		return Info{}, err
 	}
-	return Info{Version: strings.TrimSpace(string(output)), Source: "managed", CanUpdate: true}, nil
+	return Info{Version: strings.TrimSpace(string(output)), Source: SourceManaged, CanUpdate: true}, nil
 }
 
 func (m *Manager) Download(ctx context.Context, request Request) error {

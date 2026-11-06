@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBinarySource(t *testing.T) {
+	for _, source := range []BinarySource{SourceExternal, SourceManaged, SourceSystem} {
+		assert.NoError(t, source.Validate())
+	}
+	assert.Error(t, BinarySource("unknown").Validate())
+	data, err := json.Marshal(Info{Source: SourceManaged})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"version":"","source":"managed","can_update":false}`, string(data))
+}
+
+func TestManagerBinary(t *testing.T) {
+	managed := filepath.Join(t.TempDir(), "yt-dlp")
+	manager := NewManager(managed, "")
+	path, source := manager.binary()
+	assert.Equal(t, "yt-dlp", path)
+	assert.Equal(t, SourceSystem, source)
+	require.NoError(t, os.WriteFile(managed, []byte("binary"), 0o600))
+	path, source = manager.binary()
+	assert.Equal(t, managed, path)
+	assert.Equal(t, SourceManaged, source)
+	manager.external = "/external/yt-dlp"
+	path, source = manager.binary()
+	assert.Equal(t, manager.external, path)
+	assert.Equal(t, SourceExternal, source)
+}
 
 func TestDownloadArgs(t *testing.T) {
 	base := []string{
@@ -234,7 +261,7 @@ func TestManagerUpdate(t *testing.T) {
 	info, err := manager.Update(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "2026.11.05", info.Version)
-	assert.Equal(t, "managed", info.Source)
+	assert.Equal(t, SourceManaged, info.Source)
 	assert.True(t, info.CanUpdate)
 	got, err := manager.Version(t.Context())
 	require.NoError(t, err)
