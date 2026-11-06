@@ -30,8 +30,7 @@ type Request struct {
 	Title         func(string)
 }
 
-// Download runs yt-dlp and waits for the whole process to exit on cancellation.
-func Download(ctx context.Context, binary string, request Request) error {
+func downloadArgs(request Request) []string {
 	args := []string{
 		"--ignore-config", "--newline", "--progress", "--no-overwrites",
 		"--progress-template", "download:lemontube-progress:%(progress.downloaded_bytes)s:%(progress.total_bytes,progress.total_bytes_estimate)s",
@@ -59,8 +58,12 @@ func Download(ctx context.Context, binary string, request Request) error {
 	if request.CookiesFile != "" {
 		args = append(args, "--cookies", filepath.Clean(request.CookiesFile))
 	}
-	args = append(args, "--", request.URL)
-	cmd := exec.CommandContext(ctx, binary, args...)
+	return append(args, "--", request.URL)
+}
+
+// Download runs yt-dlp and waits for the whole process to exit on cancellation.
+func Download(ctx context.Context, binary string, request Request) error {
+	cmd := exec.CommandContext(ctx, binary, downloadArgs(request)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
@@ -93,13 +96,8 @@ func Download(ctx context.Context, binary string, request Request) error {
 				continue
 			}
 			if strings.HasPrefix(scanner.Text(), "lemontube-progress:") {
-				parts := strings.Split(strings.TrimPrefix(scanner.Text(), "lemontube-progress:"), ":")
-				if len(parts) == 2 && request.Progress != nil {
-					downloaded, firstErr := strconv.ParseFloat(parts[0], 64)
-					total, secondErr := strconv.ParseFloat(parts[1], 64)
-					if firstErr == nil && secondErr == nil && total > 0 {
-						request.Progress(min(100, max(0, downloaded/total*100)))
-					}
+				if percent, ok := parseProgress(scanner.Text()); ok && request.Progress != nil {
+					request.Progress(percent)
 				}
 				continue
 			}
@@ -119,6 +117,25 @@ func Download(ctx context.Context, binary string, request Request) error {
 		return fmt.Errorf("yt-dlp: %w", err)
 	}
 	return nil
+}
+
+func parseProgress(line string) (float64, bool) {
+	if !strings.HasPrefix(line, "lemontube-progress:") {
+		return 0, false
+	}
+	parts := strings.Split(strings.TrimPrefix(line, "lemontube-progress:"), ":")
+	if len(parts) != 2 {
+		return 0, false
+	}
+	downloaded, err := strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return 0, false
+	}
+	total, err := strconv.ParseFloat(parts[1], 64)
+	if err != nil || !(total > 0) {
+		return 0, false
+	}
+	return min(100, max(0, downloaded/total*100)), true
 }
 
 func isCookieProblem(line string) bool {

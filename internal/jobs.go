@@ -329,6 +329,14 @@ func (s *Service) SaveCookies(ctx context.Context, text string) error {
 	if len(text) > 1_000_000 {
 		return errors.New("cookie file exceeds 1 MB")
 	}
+	cookies, err := parseCookiesTXT(text)
+	if err != nil {
+		return err
+	}
+	return s.repo.PutCookies(ctx, cookies)
+}
+
+func parseCookiesTXT(text string) (map[string]string, error) {
 	byDomain := make(map[string][]string)
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
@@ -345,13 +353,13 @@ func (s *Service) SaveCookies(ctx context.Context, text string) error {
 		byDomain[fields[0]] = append(byDomain[fields[0]], line)
 	}
 	if len(byDomain) == 0 {
-		return errors.New("no valid cookies found")
+		return nil, errors.New("no valid cookies found")
 	}
 	cookies := make(map[string]string, len(byDomain))
 	for domain, lines := range byDomain {
 		cookies[domain] = strings.Join(lines, "\n")
 	}
-	return s.repo.PutCookies(ctx, cookies)
+	return cookies, nil
 }
 
 func (s *Service) DeleteCookies(ctx context.Context, domain string) error {

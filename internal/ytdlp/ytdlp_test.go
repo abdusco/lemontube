@@ -15,6 +15,58 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDownloadArgs(t *testing.T) {
+	base := []string{
+		"--ignore-config", "--newline", "--progress", "--no-overwrites",
+		"--progress-template", "download:lemontube-progress:%(progress.downloaded_bytes)s:%(progress.total_bytes,progress.total_bytes_estimate)s",
+		"--no-simulate", "--print", "before_dl:lemontube-title:%(title)s", "--no-quiet",
+		"--embed-metadata", "--js-runtimes", "node", "--remote-components", "ejs:github",
+		"--paths", "/work", "--output", "%(title).180B [%(id)s].%(ext)s",
+	}
+	tests := []struct {
+		name    string
+		request Request
+		options []string
+	}{
+		{"default video", Request{Directory: "/work", URL: "https://example.com", DownloadType: "video"}, []string{"--format", "bestvideo+bestaudio/best"}},
+		{"limited mp4 with subtitles and cookies", Request{Directory: "/work", URL: "https://example.com", DownloadType: "video", Format: "mp4", Quality: "720", SubtitleLangs: []string{"en", "fr"}, CookiesFile: "/work/./cookies.txt"}, []string{"--format", "bestvideo[height<=720]+bestaudio/best[height<=720]", "--merge-output-format", "mp4", "--write-subs", "--write-auto-subs", "--sub-langs", "en,fr", "--cookies", "/work/cookies.txt"}},
+		{"audio", Request{Directory: "/work", URL: "https://example.com", DownloadType: "audio", Format: "mp3"}, []string{"--format", "bestaudio/best", "--extract-audio", "--audio-format", "mp3"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := append([]string{}, base...)
+			want = append(want, tt.options...)
+			want = append(want, "--", tt.request.URL)
+			assert.Equal(t, want, downloadArgs(tt.request))
+		})
+	}
+}
+
+func TestParseProgress(t *testing.T) {
+	tests := []struct {
+		name    string
+		line    string
+		percent float64
+		ok      bool
+	}{
+		{"half", "lemontube-progress:50:100", 50, true},
+		{"clamped above", "lemontube-progress:150:100", 100, true},
+		{"clamped below", "lemontube-progress:-1:100", 0, true},
+		{"zero total", "lemontube-progress:1:0", 0, false},
+		{"invalid value", "lemontube-progress:NA:100", 0, false},
+		{"invalid total", "lemontube-progress:1:NaN", 0, false},
+		{"extra field", "lemontube-progress:1:2:3", 0, false},
+		{"missing prefix", "1:2", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			percent, ok := parseProgress(tt.line)
+			assert.Equal(t, tt.ok, ok)
+			assert.Equal(t, tt.percent, percent)
+		})
+	}
+}
+
 func TestDownloadCookieErrors(t *testing.T) {
 	tests := []struct {
 		name         string
