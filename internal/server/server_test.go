@@ -35,6 +35,8 @@ func newTestServerWithUsers(t *testing.T, users []AuthUser) http.Handler {
 	assets := fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("LemonTube")},
 		"login.html": &fstest.MapFile{Data: []byte("Sign in")},
+		"styles.css": &fstest.MapFile{Data: []byte("body {}")},
+		"app.js":     &fstest.MapFile{Data: []byte("app")},
 	}
 	return New(assets, service, users)
 }
