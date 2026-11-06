@@ -257,6 +257,12 @@ func (s *Service) run(ctx context.Context, job Job) {
 	if err != nil {
 		status = JobFailed
 		text := err.Error()
+		if errors.Is(err, ytdlp.ErrCookies) {
+			text = "Site authentication failed. Add or update the site's cookies in Site cookies, then retry."
+			if submittedURL, parseErr := url.Parse(job.URL); parseErr == nil && submittedURL.Hostname() != "" {
+				text = fmt.Sprintf("Site authentication failed. Add or update cookies for %s in Site cookies, then retry.", submittedURL.Hostname())
+			}
+		}
 		message = &text
 		if ctx.Err() != nil {
 			status = JobCanceled

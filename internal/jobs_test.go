@@ -41,6 +41,27 @@ func TestServiceRunsAndCleansJob(t *testing.T) {
 	assert.Contains(t, logs, "download complete")
 }
 
+func TestCookieFailureIdentifiesSubmittedSite(t *testing.T) {
+	s, repo := newTestService(t)
+	binary := filepath.Join(t.TempDir(), "fake-ytdlp")
+	script := "#!/bin/sh\nprintf '%s\\n' 'ERROR: Sign in. Use --cookies for authentication.' >&2\nexit 1\n"
+	require.NoError(t, os.WriteFile(binary, []byte(script), 0o700))
+	s.ytdlp = ytdlp.NewManager(filepath.Join(t.TempDir(), "managed"), binary)
+	ctx, cancel := context.WithCancel(t.Context())
+	require.NoError(t, s.Start(ctx))
+	t.Cleanup(func() { cancel(); s.Wait() })
+	id, err := s.Enqueue(t.Context(), "https://video.example.com:8443/watch?token=secret", DownloadVideo, DownloadOptions{})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		job, err := repo.GetJob(t.Context(), id)
+		return err == nil && job.Status == JobFailed
+	}, 5*time.Second, 20*time.Millisecond)
+	job, err := repo.GetJob(t.Context(), id)
+	require.NoError(t, err)
+	require.NotNil(t, job.Error)
+	assert.Equal(t, "Site authentication failed. Add or update cookies for video.example.com in Site cookies, then retry.", *job.Error)
+}
+
 func TestEnqueueValidation(t *testing.T) {
 	tests := []struct {
 		name, url string

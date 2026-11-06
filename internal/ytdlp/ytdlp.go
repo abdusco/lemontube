@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -12,6 +13,8 @@ import (
 	"syscall"
 	"time"
 )
+
+var ErrCookies = errors.New("yt-dlp reported a cookie authentication problem")
 
 // Request contains the options needed to run yt-dlp in an isolated workspace.
 type Request struct {
@@ -73,12 +76,16 @@ func Download(ctx context.Context, binary string, request Request) error {
 	reader, writer := io.Pipe()
 	cmd.Stdout, cmd.Stderr = writer, writer
 	done := make(chan struct{})
+	cookieProblem := false
 	go func() {
 		defer close(done)
 		defer reader.Close()
 		scanner := bufio.NewScanner(reader)
 		scanner.Buffer(make([]byte, 4096), 1024*1024)
 		for scanner.Scan() {
+			if isCookieProblem(scanner.Text()) {
+				cookieProblem = true
+			}
 			if strings.HasPrefix(scanner.Text(), "lemontube-title:") {
 				if request.Title != nil {
 					request.Title(strings.TrimPrefix(scanner.Text(), "lemontube-title:"))
@@ -106,7 +113,21 @@ func Download(ctx context.Context, binary string, request Request) error {
 	<-done
 	reader.Close()
 	if err != nil {
+		if ctx.Err() == nil && cookieProblem {
+			return fmt.Errorf("%w: %w", ErrCookies, err)
+		}
 		return fmt.Errorf("yt-dlp: %w", err)
 	}
 	return nil
+}
+
+func isCookieProblem(line string) bool {
+	line = strings.ToLower(line)
+	if !strings.HasPrefix(line, "error:") && !strings.HasPrefix(line, "warning:") {
+		return false
+	}
+	if strings.HasPrefix(line, "error:") && (strings.Contains(line, "--cookies") || strings.Contains(line, "cookies")) {
+		return true
+	}
+	return strings.Contains(line, "cookies") && (strings.Contains(line, "expired") || strings.Contains(line, "no longer valid"))
 }

@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,61 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDownloadCookieErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		line         string
+		exitCode     int
+		assertResult func(t *testing.T, err error)
+	}{
+		{
+			name:     "youtube authentication error",
+			line:     "ERROR: [youtube] Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication.",
+			exitCode: 1,
+			assertResult: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, ErrCookies)
+			},
+		},
+		{
+			name:     "expired cookies warning and failure",
+			line:     "WARNING: Your cookies have expired",
+			exitCode: 1,
+			assertResult: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, ErrCookies)
+			},
+		},
+		{
+			name:     "unrelated failure",
+			line:     "ERROR: Video unavailable",
+			exitCode: 1,
+			assertResult: func(t *testing.T, err error) {
+				require.ErrorContains(t, err, "yt-dlp: exit status 1")
+				assert.NotContains(t, err.Error(), "cookies")
+			},
+		},
+		{
+			name: "cookie warning on successful download",
+			line: "WARNING: Your cookies have expired",
+			assertResult: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binary := filepath.Join(t.TempDir(), "yt-dlp")
+			script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' %q >&2\nexit %d\n", tt.line, tt.exitCode)
+			require.NoError(t, os.WriteFile(binary, []byte(script), 0o755))
+			var logs []string
+			err := Download(t.Context(), binary, Request{Log: func(line string) {
+				logs = append(logs, line)
+			}})
+			tt.assertResult(t, err)
+			assert.Equal(t, []string{tt.line}, logs)
+		})
+	}
+}
 
 func TestDownloadWithInstalledYTDLP(t *testing.T) {
 	binary, err := exec.LookPath("yt-dlp")
