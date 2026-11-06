@@ -152,7 +152,7 @@ func (s *Service) sweep(ctx context.Context) error {
 		if running || job.Status == JobRunning || (job.Status == JobQueued && job.DeleteRequestedAt == nil) {
 			continue
 		}
-		if err := s.reconcile(ctx, &job); err != nil {
+		if err := s.recoverInterruptedOutputs(ctx, &job); err != nil {
 			s.recordCleanupError(ctx, job.ID, err)
 			continue
 		}
@@ -243,7 +243,7 @@ func (s *Service) cleanOrphanWorkspaces(known map[string]bool) error {
 	return nil
 }
 
-func (s *Service) reconcile(ctx context.Context, job *Job) error {
+func (s *Service) recoverInterruptedOutputs(ctx context.Context, job *Job) error {
 	changed := false
 	for i := range job.Outputs {
 		item := &job.Outputs[i]

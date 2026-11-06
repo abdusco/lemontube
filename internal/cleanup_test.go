@@ -116,7 +116,7 @@ func TestReconcilePublishedHardLink(t *testing.T) {
 	require.NoError(t, repo.SetOutputs(t.Context(), id, outputs))
 	job, err := repo.GetJob(t.Context(), id)
 	require.NoError(t, err)
-	require.NoError(t, s.reconcile(t.Context(), &job))
+	require.NoError(t, s.recoverInterruptedOutputs(t.Context(), &job))
 	got, err := repo.GetJob(t.Context(), id)
 	require.NoError(t, err)
 	assert.Equal(t, OutputPublished, got.Outputs[0].State)
