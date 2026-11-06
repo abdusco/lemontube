@@ -31,7 +31,7 @@ type Service struct {
 	logger      *slog.Logger
 	mutex       sync.RWMutex
 	orphanMutex sync.Mutex
-	running     map[string]context.CancelFunc
+	running     map[JobID]context.CancelFunc
 	wg          sync.WaitGroup
 	wake        chan struct{}
 	ytdlp       *ytdlp.Manager
@@ -53,7 +53,7 @@ func NewService(repo *Repository, config Config, logger *slog.Logger) (*Service,
 		repo:    repo,
 		config:  config,
 		logger:  logger,
-		running: make(map[string]context.CancelFunc),
+		running: make(map[JobID]context.CancelFunc),
 		wake:    make(chan struct{}, 1),
 		ytdlp:   ytdlp.NewManager(filepath.Join(config.StateDir, "bin", "yt-dlp"), config.YTDLPPath),
 	}, nil
@@ -66,7 +66,7 @@ func (s *Service) signal() {
 	}
 }
 
-func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType DownloadType, options DownloadOptions) (string, error) {
+func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType DownloadType, options DownloadOptions) (JobID, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return "", errors.New("a valid HTTP(S) URL is required")
@@ -90,7 +90,7 @@ func (s *Service) Enqueue(ctx context.Context, rawURL string, downloadType Downl
 		return "", err
 	}
 	s.signal()
-	return string(id), nil
+	return id, nil
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -144,13 +144,13 @@ func (s *Service) schedule(ctx context.Context) {
 			s.mutex.Unlock()
 			return
 		}
-		claimed, err := s.repo.ClaimJob(ctx, string(job.ID))
+		claimed, err := s.repo.ClaimJob(ctx, job.ID)
 		if err != nil || !claimed {
 			s.mutex.Unlock()
 			continue
 		}
 		jobCtx, cancel := context.WithCancel(ctx)
-		s.running[string(job.ID)] = cancel
+		s.running[job.ID] = cancel
 		s.wg.Add(1)
 		s.mutex.Unlock()
 		go s.run(jobCtx, job)
@@ -158,7 +158,7 @@ func (s *Service) schedule(ctx context.Context) {
 }
 
 func (s *Service) run(ctx context.Context, job Job) {
-	id := string(job.ID)
+	id := job.ID
 	defer s.wg.Done()
 	defer func() {
 		s.mutex.Lock()
@@ -166,7 +166,7 @@ func (s *Service) run(ctx context.Context, job Job) {
 		s.mutex.Unlock()
 		s.signal()
 	}()
-	workspace := filepath.Join(s.config.TempDir, ".lemontube", id)
+	workspace := filepath.Join(s.config.TempDir, ".lemontube", string(id))
 	err := s.executeJob(ctx, job, workspace)
 	status := JobFinished
 	var message *string
@@ -193,7 +193,7 @@ func (s *Service) run(ctx context.Context, job Job) {
 }
 
 func (s *Service) executeJob(ctx context.Context, job Job, workspace string) error {
-	id := string(job.ID)
+	id := job.ID
 	if err := os.Mkdir(workspace, 0o700); err != nil {
 		return fmt.Errorf("create workspace: %w", err)
 	}
@@ -252,7 +252,7 @@ func (s *Service) executeJob(ctx context.Context, job Job, workspace string) err
 	return nil
 }
 
-func (s *Service) Delete(ctx context.Context, id string) error {
+func (s *Service) Delete(ctx context.Context, id JobID) error {
 	found, err := s.repo.RequestDelete(ctx, id, s.config.DeleteOutputs)
 	if err != nil {
 		return err
@@ -273,7 +273,7 @@ func (s *Service) Jobs(ctx context.Context) ([]Job, error) {
 	return s.repo.ListJobs(ctx, false)
 }
 
-func (s *Service) Logs(ctx context.Context, id string) ([]string, error) {
+func (s *Service) Logs(ctx context.Context, id JobID) ([]string, error) {
 	return s.repo.Logs(ctx, id)
 }
 
@@ -285,7 +285,7 @@ func (s *Service) UpdateYTDLP(ctx context.Context) (ytdlp.Info, error) {
 	return s.ytdlp.Update(ctx)
 }
 
-func (s *Service) Retry(ctx context.Context, id string) (string, error) {
+func (s *Service) Retry(ctx context.Context, id JobID) (JobID, error) {
 	job, err := s.repo.GetJob(ctx, id)
 	if err != nil {
 		return "", err

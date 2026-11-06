@@ -16,7 +16,7 @@ import (
 
 // publish records intent before creating a staging file. A hard link provides
 // an atomic, no-overwrite finalization and lets recovery prove file ownership.
-func (s *Service) publish(ctx context.Context, id, workspace string) error {
+func (s *Service) publish(ctx context.Context, id JobID, workspace string) error {
 	var paths []string
 	err := filepath.WalkDir(workspace, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -132,12 +132,12 @@ func (s *Service) sweep(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	known := make(map[string]bool, len(jobs))
+	known := make(map[JobID]bool, len(jobs))
 	for _, job := range jobs {
-		known[string(job.ID)] = true
+		known[job.ID] = true
 	}
 	for _, job := range jobs {
-		id := string(job.ID)
+		id := job.ID
 		if job.CleanupComplete {
 			continue
 		}
@@ -161,7 +161,7 @@ func (s *Service) sweep(ctx context.Context) error {
 			s.logger.Warn("invalid workspace id", "job", job.ID)
 			continue
 		}
-		workspace := filepath.Join(s.config.TempDir, ".lemontube", id)
+		workspace := filepath.Join(s.config.TempDir, ".lemontube", string(id))
 		if err := os.RemoveAll(workspace); err != nil {
 			s.recordCleanupError(ctx, id, err)
 			continue
@@ -204,7 +204,7 @@ func (s *Service) sweep(ctx context.Context) error {
 	return s.cleanOrphanWorkspaces(known)
 }
 
-func (s *Service) recordCleanupError(ctx context.Context, id string, cleanupErr error) {
+func (s *Service) recordCleanupError(ctx context.Context, id JobID, cleanupErr error) {
 	s.logger.Warn("cleanup failed", "job", id, "error", cleanupErr)
 	if err := s.repo.RecordCleanupError(ctx, id, cleanupErr); err != nil {
 		s.logger.Error("save cleanup error", "job", id, "error", err)
@@ -213,7 +213,7 @@ func (s *Service) recordCleanupError(ctx context.Context, id string, cleanupErr 
 
 // cleanOrphanWorkspaces only examines the private root and ignores recent or
 // unrecognized entries. It never follows symlinks or touches download files.
-func (s *Service) cleanOrphanWorkspaces(known map[string]bool) error {
+func (s *Service) cleanOrphanWorkspaces(known map[JobID]bool) error {
 	root := filepath.Join(s.config.TempDir, ".lemontube")
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -221,7 +221,7 @@ func (s *Service) cleanOrphanWorkspaces(known map[string]bool) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if known[name] || !entry.IsDir() {
+		if known[JobID(name)] || !entry.IsDir() {
 			continue
 		}
 		if err := JobID(name).Validate(); err != nil {
@@ -270,7 +270,7 @@ func (s *Service) recoverInterruptedOutputs(ctx context.Context, job *Job) error
 			}
 		}
 		if changed {
-			if err := s.repo.SetOutputs(ctx, string(job.ID), job.Outputs); err != nil {
+			if err := s.repo.SetOutputs(ctx, job.ID, job.Outputs); err != nil {
 				return err
 			}
 			changed = false
@@ -343,7 +343,7 @@ func (s *Service) ClearOrphanOutputs(ctx context.Context) (int, int, error) {
 			retained++
 			continue
 		}
-		if err := s.repo.DeleteJob(ctx, string(job.ID)); err != nil {
+		if err := s.repo.DeleteJob(ctx, job.ID); err != nil {
 			return cleared, retained, err
 		}
 		cleared++

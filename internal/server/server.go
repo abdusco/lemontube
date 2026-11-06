@@ -86,11 +86,11 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 
-		return c.JSON(http.StatusCreated, map[string]string{"id": id})
+		return c.JSON(http.StatusCreated, map[string]internal.JobID{"id": id})
 	})
 
 	api.DELETE("/jobs/:id", func(c echo.Context) error {
-		if err := service.Delete(c.Request().Context(), c.Param("id")); err != nil {
+		if err := service.Delete(c.Request().Context(), internal.JobID(c.Param("id"))); err != nil {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())
 		}
 
@@ -98,7 +98,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	})
 
 	api.GET("/jobs/:id/logs", func(c echo.Context) error {
-		lines, err := service.Logs(c.Request().Context(), c.Param("id"))
+		lines, err := service.Logs(c.Request().Context(), internal.JobID(c.Param("id")))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "could not read logs")
 		}
@@ -107,12 +107,12 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	})
 
 	api.POST("/jobs/:id/retry", func(c echo.Context) error {
-		id, err := service.Retry(c.Request().Context(), c.Param("id"))
+		id, err := service.Retry(c.Request().Context(), internal.JobID(c.Param("id")))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 
-		return c.JSON(http.StatusCreated, map[string]string{"id": id})
+		return c.JSON(http.StatusCreated, map[string]internal.JobID{"id": id})
 	})
 
 	api.GET("/cookies", func(c echo.Context) error {

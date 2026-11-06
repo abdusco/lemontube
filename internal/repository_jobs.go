@@ -32,7 +32,7 @@ func (r *Repository) ListJobs(ctx context.Context, includeDeleted bool) ([]Job, 
 }
 
 // ClaimJob only transitions a job that is still queued and has not been deleted.
-func (r *Repository) ClaimJob(ctx context.Context, id string) (bool, error) {
+func (r *Repository) ClaimJob(ctx context.Context, id JobID) (bool, error) {
 	timestamp := now()
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
@@ -53,7 +53,7 @@ func (r *Repository) ClaimJob(ctx context.Context, id string) (bool, error) {
 	return count == 1, err
 }
 
-func (r *Repository) FinishJob(ctx context.Context, id string, status JobStatus, message *string) error {
+func (r *Repository) FinishJob(ctx context.Context, id JobID, status JobStatus, message *string) error {
 	timestamp := now()
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
@@ -67,7 +67,7 @@ func (r *Repository) FinishJob(ctx context.Context, id string, status JobStatus,
 	return err
 }
 
-func (r *Repository) SetProgress(ctx context.Context, id string, percent float64) error {
+func (r *Repository) SetProgress(ctx context.Context, id JobID, percent float64) error {
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
 			"percent":    percent,
@@ -78,7 +78,7 @@ func (r *Repository) SetProgress(ctx context.Context, id string, percent float64
 	return err
 }
 
-func (r *Repository) SetTitle(ctx context.Context, id, title string) error {
+func (r *Repository) SetTitle(ctx context.Context, id JobID, title string) error {
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
 			"title":      title,
@@ -89,7 +89,7 @@ func (r *Repository) SetTitle(ctx context.Context, id, title string) error {
 	return err
 }
 
-func (r *Repository) SetOutputs(ctx context.Context, id string, outputs []OutputFile) error {
+func (r *Repository) SetOutputs(ctx context.Context, id JobID, outputs []OutputFile) error {
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
 			"outputs":    JSON[[]OutputFile]{Data: outputs},
@@ -100,7 +100,7 @@ func (r *Repository) SetOutputs(ctx context.Context, id string, outputs []Output
 	return err
 }
 
-func (r *Repository) RequestDelete(ctx context.Context, id string, deleteOutputs bool) (bool, error) {
+func (r *Repository) RequestDelete(ctx context.Context, id JobID, deleteOutputs bool) (bool, error) {
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
 			"delete_requested_at": now(),
@@ -116,14 +116,14 @@ func (r *Repository) RequestDelete(ctx context.Context, id string, deleteOutputs
 	return count > 0, err
 }
 
-func (r *Repository) DeleteJob(ctx context.Context, id string) error {
+func (r *Repository) DeleteJob(ctx context.Context, id JobID) error {
 	q := r.db.Delete("jobs").
 		Where(goqu.C("id").Eq(id), goqu.C("delete_requested_at").IsNotNull())
 	_, err := q.Executor().ExecContext(ctx)
 	return err
 }
 
-func (r *Repository) CompleteCleanup(ctx context.Context, id string) error {
+func (r *Repository) CompleteCleanup(ctx context.Context, id JobID) error {
 	q := r.db.Update("jobs").
 		Set(goqu.Record{"cleanup_complete": true, "cleanup_error": nil, "cleanup_after": nil}).
 		Where(goqu.C("id").Eq(id), goqu.C("delete_requested_at").IsNotNull())
@@ -131,7 +131,7 @@ func (r *Repository) CompleteCleanup(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *Repository) RecordCleanupError(ctx context.Context, id string, cleanupErr error) error {
+func (r *Repository) RecordCleanupError(ctx context.Context, id JobID, cleanupErr error) error {
 	retryAt := time.Now().UTC().Add(time.Minute).Format("2006-01-02T15:04:05.000Z")
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
@@ -145,7 +145,7 @@ func (r *Repository) RecordCleanupError(ctx context.Context, id string, cleanupE
 	return err
 }
 
-func (r *Repository) ClearCleanupError(ctx context.Context, id string) error {
+func (r *Repository) ClearCleanupError(ctx context.Context, id JobID) error {
 	q := r.db.Update("jobs").
 		Set(goqu.Record{
 			"cleanup_error": nil,
@@ -170,7 +170,7 @@ func (r *Repository) RecoverJobs(ctx context.Context) error {
 	return err
 }
 
-func (r *Repository) AddLog(ctx context.Context, id, message string) error {
+func (r *Repository) AddLog(ctx context.Context, id JobID, message string) error {
 	q := r.db.Insert("job_logs").
 		Rows(goqu.Record{
 			"job_id":  id,
@@ -180,7 +180,7 @@ func (r *Repository) AddLog(ctx context.Context, id, message string) error {
 	return err
 }
 
-func (r *Repository) Logs(ctx context.Context, id string) ([]string, error) {
+func (r *Repository) Logs(ctx context.Context, id JobID) ([]string, error) {
 	q := r.db.From("job_logs").
 		Select("message").
 		Where(goqu.C("job_id").Eq(id)).

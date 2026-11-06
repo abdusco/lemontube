@@ -40,7 +40,7 @@ func TestServiceRunsAndCleansJob(t *testing.T) {
 	require.Len(t, job.Outputs, 1)
 	assert.FileExists(t, filepath.Join(s.config.DownloadDir, "result.mp4"))
 	require.Eventually(t, func() bool {
-		_, err := os.Stat(filepath.Join(s.config.TempDir, ".lemontube", id))
+		_, err := os.Stat(filepath.Join(s.config.TempDir, ".lemontube", string(id)))
 		return os.IsNotExist(err)
 	}, time.Second, 10*time.Millisecond)
 	logs, err := repo.Logs(t.Context(), id)
@@ -104,7 +104,7 @@ func TestDeleteRunningJobCleansWorkspace(t *testing.T) {
 	})
 	id, err := s.Enqueue(t.Context(), "https://example.com/video", DownloadVideo, DownloadOptions{})
 	require.NoError(t, err)
-	workspace := filepath.Join(s.config.TempDir, ".lemontube", id)
+	workspace := filepath.Join(s.config.TempDir, ".lemontube", string(id))
 	require.Eventually(t, func() bool {
 		_, err := os.Stat(filepath.Join(workspace, "incomplete.part"))
 		return err == nil

@@ -117,7 +117,7 @@ func (row jobRow) toDomain() Job {
 	}
 }
 
-func (r *Repository) GetJob(ctx context.Context, id string) (Job, error) {
+func (r *Repository) GetJob(ctx context.Context, id JobID) (Job, error) {
 	q := r.db.From("jobs").
 		Select(&jobRow{}).
 		Where(goqu.C("id").Eq(id))

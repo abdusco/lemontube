@@ -25,7 +25,7 @@ func newTestService(t *testing.T) (*Service, *Repository) {
 
 func TestPublishAvoidsCollisionsAndTracksFiles(t *testing.T) {
 	s, repo := newTestService(t)
-	id := "0123456789abcdef0123456789abcdef"
+	const id = "0123456789abcdef0123456789abcdef"
 	require.NoError(t, repo.CreateJob(t.Context(), Job{ID: JobID(id), URL: "https://example.com", Title: "example", DownloadType: DownloadVideo}))
 	workspace := filepath.Join(s.config.TempDir, ".lemontube", id)
 	require.NoError(t, os.Mkdir(workspace, 0o700))
@@ -87,8 +87,8 @@ func TestClearOrphanOutputs(t *testing.T) {
 	} {
 		require.NoError(t, repo.CreateJob(ctx, Job{ID: JobID(item.id), URL: "https://example.com", Title: item.name, DownloadType: DownloadVideo}))
 		require.NoError(t, os.WriteFile(filepath.Join(s.config.DownloadDir, item.name), []byte(item.content), 0o600))
-		require.NoError(t, repo.SetOutputs(ctx, item.id, []OutputFile{{Path: item.name, Stage: ".lemontube-" + item.id + "-0", State: "published", SHA256: hex.EncodeToString(digest[:])}}))
-		_, err := repo.RequestDelete(ctx, item.id, false)
+		require.NoError(t, repo.SetOutputs(ctx, JobID(item.id), []OutputFile{{Path: item.name, Stage: ".lemontube-" + item.id + "-0", State: "published", SHA256: hex.EncodeToString(digest[:])}}))
+		_, err := repo.RequestDelete(ctx, JobID(item.id), false)
 		require.NoError(t, err)
 	}
 	unowned := filepath.Join(s.config.DownloadDir, "unowned.mp4")
@@ -107,7 +107,7 @@ func TestClearOrphanOutputs(t *testing.T) {
 
 func TestReconcilePublishedHardLink(t *testing.T) {
 	s, repo := newTestService(t)
-	id := "0123456789abcdef0123456789abcdef"
+	const id = "0123456789abcdef0123456789abcdef"
 	stage := ".lemontube-" + id + "-0"
 	require.NoError(t, repo.CreateJob(t.Context(), Job{ID: JobID(id), URL: "https://example.com", Title: "example", DownloadType: DownloadVideo}))
 	require.NoError(t, os.WriteFile(filepath.Join(s.config.DownloadDir, stage), []byte("download"), 0o600))
@@ -126,7 +126,7 @@ func TestReconcilePublishedHardLink(t *testing.T) {
 
 func TestSweepCleansInterruptedWorkspaceAndPreservesUnownedFiles(t *testing.T) {
 	s, repo := newTestService(t)
-	id := "0123456789abcdef0123456789abcdef"
+	const id = "0123456789abcdef0123456789abcdef"
 	require.NoError(t, repo.CreateJob(t.Context(), Job{
 		ID:           JobID(id),
 		URL:          "https://example.com",
@@ -170,7 +170,7 @@ func TestSweepRemovesOnlyOldOrphanWorkspaces(t *testing.T) {
 
 func TestSweepRetainsFailedDeletionForRetry(t *testing.T) {
 	s, repo := newTestService(t)
-	id := "0123456789abcdef0123456789abcdef"
+	const id = "0123456789abcdef0123456789abcdef"
 	require.NoError(t, repo.CreateJob(t.Context(), Job{
 		ID:           JobID(id),
 		URL:          "https://example.com",
