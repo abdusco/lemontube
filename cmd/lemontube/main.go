@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -21,32 +21,40 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	if err := run(logger); err != nil {
+		logger.Error("LemonTube stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(logger *slog.Logger) error {
 	authUsers, configured := os.LookupEnv("AUTH_USERS")
 	if configured && authUsers == "" {
-		log.Fatal("AUTH_USERS must not be empty; unset it to disable authentication")
+		return errors.New("AUTH_USERS must not be empty; unset it to disable authentication")
 	}
 	users, err := server.ParseAuthUsers(authUsers)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("parse authentication settings: %w", err)
 	}
 	stateDir := os.Getenv("STATE_DIR")
 	if stateDir == "" {
 		stateDir = "."
 	}
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("create state directory: %w", err)
 	}
 	lock, err := os.OpenFile(filepath.Join(stateDir, ".lemontube.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("open state lock: %w", err)
 	}
 	defer lock.Close()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		log.Fatal("another LemonTube instance owns this state directory")
+		return fmt.Errorf("lock state directory (another LemonTube instance may own it): %w", err)
 	}
 	repo, err := internal.OpenRepository(filepath.Join(stateDir, "lemontube.sqlite3"))
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("open database: %w", err)
 	}
 	defer repo.Close()
 	address := os.Getenv("LISTEN_ADDR")
@@ -74,33 +82,38 @@ func main() {
 		Concurrency:   concurrency,
 		DeleteOutputs: deleteOutputs,
 		ClearAfter:    time.Duration(clearSeconds) * time.Second,
-	}, slog.Default())
+	}, logger)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("configure service: %w", err)
 	}
 	if err := service.Start(ctx); err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("start service: %w", err)
 	}
-	defer service.Wait()
+	defer func() {
+		stop()
+		service.Wait()
+	}()
 	e := server.New(web.Assets(), service, users)
 	e.HideBanner = true
 	e.HidePort = true
 	e.Listener, err = net.Listen("tcp", address)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("listen on %s: %w", address, err)
 	}
-	log.Printf("Listening at %s", browserURL(e.Listener.Addr()))
+	logger.Info("Listening at " + browserURL(e.Listener.Addr()))
 	go func() {
 		<-ctx.Done()
+		logger.Info("Shutting down")
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := e.Shutdown(shutdown); err != nil {
-			log.Printf("shutdown: %v", err)
+			logger.Error("HTTP shutdown failed", "error", err)
 		}
 	}()
 	if err := e.Start(address); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+		return fmt.Errorf("serve HTTP: %w", err)
 	}
+	return nil
 }
 
 func browserURL(addr net.Addr) string {

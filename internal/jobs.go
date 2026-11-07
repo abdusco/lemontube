@@ -103,6 +103,7 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (JobID, err
 	if err := s.repo.CreateJob(ctx, job); err != nil {
 		return "", err
 	}
+	s.logger.Info("Download queued", "job", id, "type", params.DownloadType)
 	s.signal()
 	return id, nil
 }
@@ -161,6 +162,9 @@ func (s *Service) schedule(ctx context.Context) {
 		claimed, err := s.repo.ClaimJob(ctx, job.ID)
 		if err != nil || !claimed {
 			s.mutex.Unlock()
+			if err != nil && ctx.Err() == nil {
+				s.logger.Error("Claim download", "job", job.ID, "error", err)
+			}
 			continue
 		}
 		jobCtx, cancel := context.WithCancel(ctx)
@@ -173,6 +177,7 @@ func (s *Service) schedule(ctx context.Context) {
 
 func (s *Service) run(ctx context.Context, job Job) {
 	id := job.ID
+	s.logger.Info("Download started", "job", id)
 	defer s.wg.Done()
 	defer func() {
 		s.mutex.Lock()
@@ -203,7 +208,16 @@ func (s *Service) run(ctx context.Context, job Job) {
 		Status:  status,
 		Message: message,
 	}); err != nil {
-		s.logger.Error("finish job", "error", err)
+		s.logger.Error("finish job", "job", id, "error", err)
+	}
+	switch status {
+	case JobFinished:
+		s.logger.Info("Download finished", "job", id)
+	case JobCanceled:
+		s.logger.Info("Download canceled", "job", id)
+	case JobFailed:
+		// Download errors may contain private URLs; detailed logs remain in the app.
+		s.logger.Warn("Download failed; see download log for details", "job", id)
 	}
 	if err := os.RemoveAll(workspace); err != nil {
 		s.logger.Warn("remove workspace", "job", job.ID, "error", err)
@@ -278,6 +292,7 @@ func (s *Service) Delete(ctx context.Context, id JobID) error {
 	if !found {
 		return fmt.Errorf("job not found")
 	}
+	s.logger.Info("Download removal requested", "job", id)
 	s.mutex.RLock()
 	if cancel := s.running[id]; cancel != nil {
 		cancel()
@@ -300,7 +315,14 @@ func (s *Service) YTDLPVersion(ctx context.Context) (ytdlp.Info, error) {
 }
 
 func (s *Service) UpdateYTDLP(ctx context.Context) (ytdlp.Info, error) {
-	return s.ytdlp.Update(ctx)
+	s.logger.Info("Updating yt-dlp")
+	info, err := s.ytdlp.Update(ctx)
+	if err != nil {
+		s.logger.Error("yt-dlp update failed", "error", err)
+		return info, err
+	}
+	s.logger.Info("yt-dlp updated", "version", info.Version)
+	return info, nil
 }
 
 func (s *Service) Retry(ctx context.Context, id JobID) (JobID, error) {
