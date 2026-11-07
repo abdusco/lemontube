@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 const sessionCookie = "lemontube_session"
@@ -78,7 +78,7 @@ func newAuthentication(params authenticationParams) *authentication {
 func (a *authentication) registerRoutes(e *echo.Echo, loginLimit echo.MiddlewareFunc) {
 	e.Use(checkOrigin)
 
-	e.GET("/login", func(c echo.Context) error {
+	e.GET("/login", func(c *echo.Context) error {
 		if len(a.users) == 0 || a.authenticated(c.Request()) {
 			return c.Redirect(http.StatusSeeOther, "/")
 		}
@@ -93,7 +93,7 @@ func (a *authentication) registerRoutes(e *echo.Echo, loginLimit echo.Middleware
 
 	e.POST("/login", a.login, noStore, loginLimit)
 
-	e.POST("/logout", func(c echo.Context) error {
+	e.POST("/logout", func(c *echo.Context) error {
 		if cookie, err := c.Cookie(sessionCookie); err == nil {
 			a.mutex.Lock()
 			delete(a.sessions, cookie.Value)
@@ -103,12 +103,12 @@ func (a *authentication) registerRoutes(e *echo.Echo, loginLimit echo.Middleware
 		return c.Redirect(http.StatusSeeOther, "/login")
 	}, a.requirePageAuth)
 
-	e.GET("/api/session", func(c echo.Context) error {
+	e.GET("/api/session", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]bool{"auth_enabled": len(a.users) > 0})
 	}, noStore, a.requireAPIAuth)
 }
 
-func (a *authentication) login(c echo.Context) error {
+func (a *authentication) login(c *echo.Context) error {
 	if !sameOrigin(c.Request()) {
 		return echo.ErrForbidden
 	}
@@ -190,7 +190,7 @@ func (a *authentication) authenticated(r *http.Request) bool {
 }
 
 func checkOrigin(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		r := c.Request()
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !sameOrigin(r) {
 			return echo.ErrForbidden
@@ -201,7 +201,7 @@ func checkOrigin(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func (a *authentication) requireAPIAuth(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if len(a.users) != 0 && !a.authenticated(c.Request()) {
 			return echo.ErrUnauthorized
 		}
@@ -211,7 +211,7 @@ func (a *authentication) requireAPIAuth(next echo.HandlerFunc) echo.HandlerFunc 
 }
 
 func (a *authentication) requirePageAuth(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if len(a.users) != 0 && !a.authenticated(c.Request()) {
 			if c.Request().Method != http.MethodGet {
 				return echo.ErrUnauthorized

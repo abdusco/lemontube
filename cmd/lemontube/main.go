@@ -96,24 +96,25 @@ func run(ctx context.Context) error {
 		service.Wait()
 	}()
 	e := server.New(web.Assets(), service, users)
-	e.Server.BaseContext = func(net.Listener) context.Context { return context.WithoutCancel(ctx) }
-	e.HideBanner = true
-	e.HidePort = true
-	e.Listener, err = net.Listen("tcp", address)
+	httpServer := &http.Server{
+		Handler:     e,
+		BaseContext: func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
+	}
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", address, err)
 	}
-	log.FromCtx(ctx).Info("Listening at " + browserURL(e.Listener.Addr()))
+	log.FromCtx(ctx).Info("Listening at " + browserURL(listener.Addr()))
 	go func() {
 		<-ctx.Done()
 		log.FromCtx(ctx).Info("Shutting down")
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
-		if err := e.Shutdown(shutdown); err != nil {
+		if err := httpServer.Shutdown(shutdown); err != nil {
 			log.FromCtx(shutdown).Error("HTTP shutdown failed", "error", err)
 		}
 	}()
-	if err := e.Start(address); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve HTTP: %w", err)
 	}
 	return nil

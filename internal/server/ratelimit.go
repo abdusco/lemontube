@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func rateLimit(limit int, window time.Duration) echo.MiddlewareFunc {
@@ -13,7 +13,7 @@ func rateLimit(limit int, window time.Duration) echo.MiddlewareFunc {
 	var count int
 	var resetAt time.Time
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			mutex.Lock()
 			now := time.Now()
 
