@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"lemontube/internal/log"
 	"lemontube/internal/ytdlp"
 )
 
@@ -28,7 +28,6 @@ type Config struct {
 type Service struct {
 	repo        *Repository
 	config      Config
-	logger      *slog.Logger
 	mutex       sync.RWMutex
 	orphanMutex sync.Mutex
 	running     map[JobID]context.CancelFunc
@@ -37,7 +36,7 @@ type Service struct {
 	ytdlp       *ytdlp.Manager
 }
 
-func NewService(repo *Repository, config Config, logger *slog.Logger) (*Service, error) {
+func NewService(repo *Repository, config Config) (*Service, error) {
 	if config.Concurrency < 1 {
 		config.Concurrency = 3
 	}
@@ -52,7 +51,6 @@ func NewService(repo *Repository, config Config, logger *slog.Logger) (*Service,
 	return &Service{
 		repo:    repo,
 		config:  config,
-		logger:  logger,
 		running: make(map[JobID]context.CancelFunc),
 		wake:    make(chan struct{}, 1),
 		ytdlp:   ytdlp.NewManager(filepath.Join(config.StateDir, "bin", "yt-dlp"), config.YTDLPPath),
@@ -103,7 +101,7 @@ func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (JobID, err
 	if err := s.repo.CreateJob(ctx, job); err != nil {
 		return "", err
 	}
-	s.logger.Info("Download queued", "job", id, "type", params.DownloadType)
+	log.FromCtx(ctx).Info("Download queued", "job", id, "type", params.DownloadType)
 	s.signal()
 	return id, nil
 }
@@ -113,7 +111,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	if err := s.sweep(ctx); err != nil {
-		s.logger.Error("startup cleanup", "error", err)
+		log.FromCtx(ctx).Error("startup cleanup", "error", err)
 	}
 	s.wg.Add(1)
 	go s.loop(ctx)
@@ -130,7 +128,7 @@ func (s *Service) loop(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		if err := s.sweep(ctx); err != nil && ctx.Err() == nil {
-			s.logger.Error("cleanup", "error", err)
+			log.FromCtx(ctx).Error("cleanup", "error", err)
 		}
 		s.schedule(ctx)
 		select {
@@ -146,7 +144,7 @@ func (s *Service) schedule(ctx context.Context) {
 	jobs, err := s.repo.ListJobs(ctx, false)
 	if err != nil {
 		if ctx.Err() == nil {
-			s.logger.Error("list queue", "error", err)
+			log.FromCtx(ctx).Error("list queue", "error", err)
 		}
 		return
 	}
@@ -163,7 +161,7 @@ func (s *Service) schedule(ctx context.Context) {
 		if err != nil || !claimed {
 			s.mutex.Unlock()
 			if err != nil && ctx.Err() == nil {
-				s.logger.Error("Claim download", "job", job.ID, "error", err)
+				log.FromCtx(ctx).Error("Claim download", "job", job.ID, "error", err)
 			}
 			continue
 		}
@@ -177,7 +175,7 @@ func (s *Service) schedule(ctx context.Context) {
 
 func (s *Service) run(ctx context.Context, job Job) {
 	id := job.ID
-	s.logger.Info("Download started", "job", id)
+	log.FromCtx(ctx).Info("Download started", "job", id)
 	defer s.wg.Done()
 	defer func() {
 		s.mutex.Lock()
@@ -203,24 +201,24 @@ func (s *Service) run(ctx context.Context, job Job) {
 			status = JobCanceled
 		}
 	}
-	if err := s.repo.FinishJob(context.Background(), FinishJobParams{
+	if err := s.repo.FinishJob(context.WithoutCancel(ctx), FinishJobParams{
 		ID:      id,
 		Status:  status,
 		Message: message,
 	}); err != nil {
-		s.logger.Error("finish job", "job", id, "error", err)
+		log.FromCtx(ctx).Error("finish job", "job", id, "error", err)
 	}
 	switch status {
 	case JobFinished:
-		s.logger.Info("Download finished", "job", id)
+		log.FromCtx(ctx).Info("Download finished", "job", id)
 	case JobCanceled:
-		s.logger.Info("Download canceled", "job", id)
+		log.FromCtx(ctx).Info("Download canceled", "job", id)
 	case JobFailed:
 		// Download errors may contain private URLs; detailed logs remain in the app.
-		s.logger.Warn("Download failed; see download log for details", "job", id)
+		log.FromCtx(ctx).Warn("Download failed; see download log for details", "job", id)
 	}
 	if err := os.RemoveAll(workspace); err != nil {
-		s.logger.Warn("remove workspace", "job", job.ID, "error", err)
+		log.FromCtx(ctx).Warn("remove workspace", "job", job.ID, "error", err)
 	}
 }
 
@@ -255,8 +253,8 @@ func (s *Service) executeJob(ctx context.Context, job Job, workspace string) err
 				return
 			}
 			titleSet = true
-			if err := s.repo.SetTitle(context.Background(), id, title); err != nil {
-				s.logger.Warn("save title", "error", err)
+			if err := s.repo.SetTitle(context.WithoutCancel(ctx), id, title); err != nil {
+				log.FromCtx(ctx).Warn("save title", "job", id, "error", err)
 			}
 		},
 		Progress: func(percent float64) {
@@ -265,13 +263,13 @@ func (s *Service) executeJob(ctx context.Context, job Job, workspace string) err
 				return
 			}
 			lastPercent = whole
-			if err := s.repo.SetProgress(context.Background(), id, percent); err != nil {
-				s.logger.Warn("save progress", "error", err)
+			if err := s.repo.SetProgress(context.WithoutCancel(ctx), id, percent); err != nil {
+				log.FromCtx(ctx).Warn("save progress", "job", id, "error", err)
 			}
 		},
 		Log: func(line string) {
-			if err := s.repo.AddLog(context.Background(), id, line); err != nil {
-				s.logger.Warn("save log", "error", err)
+			if err := s.repo.AddLog(context.WithoutCancel(ctx), id, line); err != nil {
+				log.FromCtx(ctx).Warn("save log", "job", id, "error", err)
 			}
 		},
 	})
@@ -292,7 +290,7 @@ func (s *Service) Delete(ctx context.Context, id JobID) error {
 	if !found {
 		return fmt.Errorf("job not found")
 	}
-	s.logger.Info("Download removal requested", "job", id)
+	log.FromCtx(ctx).Info("Download removal requested", "job", id)
 	s.mutex.RLock()
 	if cancel := s.running[id]; cancel != nil {
 		cancel()
@@ -315,13 +313,13 @@ func (s *Service) YTDLPVersion(ctx context.Context) (ytdlp.Info, error) {
 }
 
 func (s *Service) UpdateYTDLP(ctx context.Context) (ytdlp.Info, error) {
-	s.logger.Info("Updating yt-dlp")
+	log.FromCtx(ctx).Info("Updating yt-dlp")
 	info, err := s.ytdlp.Update(ctx)
 	if err != nil {
-		s.logger.Error("yt-dlp update failed", "error", err)
+		log.FromCtx(ctx).Error("yt-dlp update failed", "error", err)
 		return info, err
 	}
-	s.logger.Info("yt-dlp updated", "version", info.Version)
+	log.FromCtx(ctx).Info("yt-dlp updated", "version", info.Version)
 	return info, nil
 }
 

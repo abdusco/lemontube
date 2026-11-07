@@ -1,8 +1,6 @@
 package server
 
 import (
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,7 +29,7 @@ func newTestServerWithUsers(t *testing.T, users []AuthUser) http.Handler {
 	service, err := internal.NewService(repo, internal.Config{
 		DownloadDir: filepath.Join(dir, "downloads"),
 		TempDir:     filepath.Join(dir, "temp"),
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	})
 	require.NoError(t, err)
 	assets := fstest.MapFS{
 		"index.html":    &fstest.MapFile{Data: []byte("LemonTube")},
@@ -118,7 +116,7 @@ func TestDownloadEncodedFilename(t *testing.T) {
 	service, err := internal.NewService(repo, internal.Config{
 		DownloadDir: downloadDir,
 		TempDir:     filepath.Join(dir, "temp"),
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	})
 	require.NoError(t, err)
 	const filename = "What happens if you open the window at  -60°C⧸-76°F  (Yakutia, Russia) [ZvIGTm3PAZQ].mp4"
 	require.NoError(t, os.WriteFile(filepath.Join(downloadDir, filename), []byte("video"), 0o600))

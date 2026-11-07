@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"lemontube/internal/log"
 )
 
 // publish records intent before creating a staging file. A hard link provides
@@ -158,7 +160,7 @@ func (s *Service) sweep(ctx context.Context) error {
 			continue
 		}
 		if err := job.ID.Validate(); err != nil {
-			s.logger.Warn("invalid workspace id", "job", job.ID)
+			log.FromCtx(ctx).Warn("invalid workspace id", "job", job.ID)
 			continue
 		}
 		workspace := filepath.Join(s.config.TempDir, ".lemontube", string(id))
@@ -201,19 +203,19 @@ func (s *Service) sweep(ctx context.Context) error {
 			return err
 		}
 	}
-	return s.cleanOrphanWorkspaces(known)
+	return s.cleanOrphanWorkspaces(ctx, known)
 }
 
 func (s *Service) recordCleanupError(ctx context.Context, id JobID, cleanupErr error) {
-	s.logger.Warn("cleanup failed", "job", id, "error", cleanupErr)
+	log.FromCtx(ctx).Warn("cleanup failed", "job", id, "error", cleanupErr)
 	if err := s.repo.RecordCleanupError(ctx, id, cleanupErr); err != nil {
-		s.logger.Error("save cleanup error", "job", id, "error", err)
+		log.FromCtx(ctx).Error("save cleanup error", "job", id, "error", err)
 	}
 }
 
 // cleanOrphanWorkspaces only examines the private root and ignores recent or
 // unrecognized entries. It never follows symlinks or touches download files.
-func (s *Service) cleanOrphanWorkspaces(known map[JobID]bool) error {
+func (s *Service) cleanOrphanWorkspaces(ctx context.Context, known map[JobID]bool) error {
 	root := filepath.Join(s.config.TempDir, ".lemontube")
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -235,7 +237,7 @@ func (s *Service) cleanOrphanWorkspaces(known map[JobID]bool) error {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(root, name)); err != nil {
-			s.logger.Warn("cleanup orphan workspace", "workspace", name, "error", err)
+			log.FromCtx(ctx).Warn("cleanup orphan workspace", "workspace", name, "error", err)
 		}
 	}
 	return nil
@@ -339,7 +341,7 @@ func (s *Service) ClearOrphanOutputs(ctx context.Context) (int, int, error) {
 			continue
 		}
 		if err := s.deleteOutputs(job.Outputs); err != nil {
-			s.logger.Warn("orphan output retained", "job", job.ID, "error", err)
+			log.FromCtx(ctx).Warn("orphan output retained", "job", job.ID, "error", err)
 			retained++
 			continue
 		}

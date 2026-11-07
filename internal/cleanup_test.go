@@ -3,8 +3,6 @@ package internal
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +16,7 @@ func newTestService(t *testing.T) (*Service, *Repository) {
 	t.Helper()
 	repo := newTestRepository(t)
 	dir := t.TempDir()
-	service, err := NewService(repo, Config{DownloadDir: filepath.Join(dir, "downloads"), TempDir: filepath.Join(dir, "temp")}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	service, err := NewService(repo, Config{DownloadDir: filepath.Join(dir, "downloads"), TempDir: filepath.Join(dir, "temp")})
 	require.NoError(t, err)
 	return service, repo
 }

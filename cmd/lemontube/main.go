@@ -16,19 +16,21 @@ import (
 	"time"
 
 	"lemontube/internal"
+	"lemontube/internal/log"
 	"lemontube/internal/server"
 	"lemontube/web"
 )
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := run(logger); err != nil {
+	ctx := log.ToCtx(context.Background(), logger)
+	if err := run(ctx); err != nil {
 		logger.Error("LemonTube stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
+func run(ctx context.Context) error {
 	authUsers, configured := os.LookupEnv("AUTH_USERS")
 	if configured && authUsers == "" {
 		return errors.New("AUTH_USERS must not be empty; unset it to disable authentication")
@@ -61,7 +63,7 @@ func run(logger *slog.Logger) error {
 	if address == "" {
 		address = ":8081"
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	downloadDir := os.Getenv("DOWNLOAD_DIR")
 	if downloadDir == "" {
@@ -82,7 +84,7 @@ func run(logger *slog.Logger) error {
 		Concurrency:   concurrency,
 		DeleteOutputs: deleteOutputs,
 		ClearAfter:    time.Duration(clearSeconds) * time.Second,
-	}, logger)
+	})
 	if err != nil {
 		return fmt.Errorf("configure service: %w", err)
 	}
@@ -94,20 +96,21 @@ func run(logger *slog.Logger) error {
 		service.Wait()
 	}()
 	e := server.New(web.Assets(), service, users)
+	e.Server.BaseContext = func(net.Listener) context.Context { return context.WithoutCancel(ctx) }
 	e.HideBanner = true
 	e.HidePort = true
 	e.Listener, err = net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", address, err)
 	}
-	logger.Info("Listening at " + browserURL(e.Listener.Addr()))
+	log.FromCtx(ctx).Info("Listening at " + browserURL(e.Listener.Addr()))
 	go func() {
 		<-ctx.Done()
-		logger.Info("Shutting down")
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		log.FromCtx(ctx).Info("Shutting down")
+		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		if err := e.Shutdown(shutdown); err != nil {
-			logger.Error("HTTP shutdown failed", "error", err)
+			log.FromCtx(shutdown).Error("HTTP shutdown failed", "error", err)
 		}
 	}()
 	if err := e.Start(address); err != nil && !errors.Is(err, http.ErrServerClosed) {
