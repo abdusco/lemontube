@@ -5,7 +5,9 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -81,6 +83,13 @@ func main() {
 	}
 	defer service.Wait()
 	e := server.New(web.Assets(), service, users)
+	e.HideBanner = true
+	e.HidePort = true
+	e.Listener, err = net.Listen("tcp", address)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Listening at %s", browserURL(e.Listener.Addr()))
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -92,4 +101,15 @@ func main() {
 	if err := e.Start(address); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+}
+
+func browserURL(addr net.Addr) string {
+	host, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return "http://" + addr.String()
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	return (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, port)}).String()
 }
