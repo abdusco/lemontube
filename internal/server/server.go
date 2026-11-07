@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	e := echo.NewWithConfig(echo.Config{
+		HTTPErrorHandler: handleHTTPError,
 		Router: echo.NewRouter(echo.RouterConfig{
 			UnescapePathParamValues: true,
 		}),
@@ -32,7 +34,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	api.POST("/orphan-outputs/clear", func(c *echo.Context) error {
 		cleared, retained, err := service.ClearOrphanOutputs(c.Request().Context())
 		if err != nil {
-			return err
+			return fmt.Errorf("clear orphan outputs: %w", err)
 		}
 
 		return c.JSON(http.StatusOK, map[string]int{"cleared": cleared, "retained": retained})
@@ -45,12 +47,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	api.GET("/yt-dlp", func(c *echo.Context) error {
 		info, err := service.YTDLPVersion(c.Request().Context())
 		if err != nil {
-			return c.JSON(http.StatusOK, map[string]any{
-				"version":    "",
-				"source":     info.Source,
-				"can_update": info.CanUpdate,
-				"error":      "Could not run yt-dlp",
-			})
+			return fmt.Errorf("get yt-dlp version: %w", err)
 		}
 
 		return c.JSON(http.StatusOK, info)
@@ -59,7 +56,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	api.POST("/yt-dlp/update", func(c *echo.Context) error {
 		info, err := service.UpdateYTDLP(c.Request().Context())
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return fmt.Errorf("update yt-dlp: %w", err)
 		}
 
 		return c.JSON(http.StatusOK, info)
@@ -68,7 +65,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	api.GET("/jobs", func(c *echo.Context) error {
 		jobs, err := service.Jobs(c.Request().Context())
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "could not list jobs")
+			return fmt.Errorf("list jobs: %w", err)
 		}
 
 		return c.JSON(http.StatusOK, jobs)
@@ -82,7 +79,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 		}
 
 		if err := c.Bind(&request); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid request").Wrap(err)
 		}
 
 		id, err := service.Enqueue(c.Request().Context(), internal.EnqueueParams{
@@ -91,7 +88,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 			Options:      request.Options,
 		})
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return operationError("enqueue job", err)
 		}
 
 		return c.JSON(http.StatusCreated, map[string]internal.JobID{"id": id})
@@ -99,7 +96,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 
 	api.DELETE("/jobs/:id", func(c *echo.Context) error {
 		if err := service.Delete(c.Request().Context(), internal.JobID(c.Param("id"))); err != nil {
-			return echo.NewHTTPError(http.StatusNotFound, err.Error())
+			return operationError("delete job", err)
 		}
 
 		return c.NoContent(http.StatusNoContent)
@@ -108,7 +105,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	api.GET("/jobs/:id/logs", func(c *echo.Context) error {
 		lines, err := service.Logs(c.Request().Context(), internal.JobID(c.Param("id")))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "could not read logs")
+			return fmt.Errorf("read job logs: %w", err)
 		}
 
 		return c.JSON(http.StatusOK, lines)
@@ -117,7 +114,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	api.POST("/jobs/:id/retry", func(c *echo.Context) error {
 		id, err := service.Retry(c.Request().Context(), internal.JobID(c.Param("id")))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return operationError("retry job", err)
 		}
 
 		return c.JSON(http.StatusCreated, map[string]internal.JobID{"id": id})
@@ -126,7 +123,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 	api.GET("/cookies", func(c *echo.Context) error {
 		domains, err := service.Cookies(c.Request().Context())
 		if err != nil {
-			return echo.ErrInternalServerError
+			return fmt.Errorf("list cookies: %w", err)
 		}
 
 		return c.JSON(http.StatusOK, domains)
@@ -136,11 +133,15 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 		body := http.MaxBytesReader(c.Response(), c.Request().Body, 1_000_000)
 		data, err := io.ReadAll(body)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "cookie file is too large")
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "cookie file is too large").Wrap(err)
+			}
+			return fmt.Errorf("read cookie file: %w", err)
 		}
 
 		if err := service.SaveCookies(c.Request().Context(), string(data)); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return operationError("save cookies", err)
 		}
 
 		return c.NoContent(http.StatusNoContent)
@@ -148,7 +149,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 
 	api.DELETE("/cookies", func(c *echo.Context) error {
 		if err := service.DeleteCookies(c.Request().Context(), ""); err != nil {
-			return echo.ErrInternalServerError
+			return fmt.Errorf("delete cookies: %w", err)
 		}
 
 		return c.NoContent(http.StatusNoContent)
@@ -156,7 +157,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 
 	api.DELETE("/cookies/:domain", func(c *echo.Context) error {
 		if err := service.DeleteCookies(c.Request().Context(), c.Param("domain")); err != nil {
-			return echo.ErrInternalServerError
+			return fmt.Errorf("delete domain cookies: %w", err)
 		}
 
 		return c.NoContent(http.StatusNoContent)
@@ -166,11 +167,7 @@ func New(assets fs.FS, service *internal.Service, users []AuthUser) *echo.Echo {
 		name := c.Param("name")
 		path, err := service.DownloadPath(c.Request().Context(), name)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return echo.ErrNotFound
-			}
-
-			return echo.ErrInternalServerError
+			return operationError("find download", err)
 		}
 
 		http.ServeFile(c.Response(), c.Request(), path)

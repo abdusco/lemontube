@@ -85,7 +85,7 @@ func (a *authentication) registerRoutes(e *echo.Echo, loginLimit echo.Middleware
 
 		page, err := a.loginPage()
 		if err != nil {
-			return err
+			return fmt.Errorf("read login page: %w", err)
 		}
 
 		return c.HTMLBlob(http.StatusOK, page)
@@ -115,7 +115,7 @@ func (a *authentication) login(c *echo.Context) error {
 
 	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, 8192)
 	if err := c.Request().ParseForm(); err != nil {
-		return echo.ErrBadRequest
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid login request").Wrap(err)
 	}
 
 	username, password := c.FormValue("username"), c.FormValue("password")

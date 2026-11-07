@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -70,6 +71,15 @@ type EnqueueParams struct {
 	Options      DownloadOptions
 }
 
+// InputError identifies a validation failure that can be reported to a client.
+type InputError struct {
+	Err error
+}
+
+func (e *InputError) Error() string { return e.Err.Error() }
+
+func (e *InputError) Unwrap() error { return e.Err }
+
 func (p EnqueueParams) Validate() error {
 	u, err := url.Parse(p.URL)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
@@ -81,7 +91,7 @@ func (p EnqueueParams) Validate() error {
 
 func (s *Service) Enqueue(ctx context.Context, params EnqueueParams) (JobID, error) {
 	if err := params.Validate(); err != nil {
-		return "", err
+		return "", &InputError{Err: err}
 	}
 	options, err := params.Options.Normalize(params.DownloadType)
 	if err != nil {
@@ -288,7 +298,7 @@ func (s *Service) Delete(ctx context.Context, id JobID) error {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("job not found")
+		return fmt.Errorf("job not found: %w", fs.ErrNotExist)
 	}
 	log.FromCtx(ctx).Info("Download removal requested", "job", id)
 	s.mutex.RLock()
@@ -316,7 +326,6 @@ func (s *Service) UpdateYTDLP(ctx context.Context) (ytdlp.Info, error) {
 	log.FromCtx(ctx).Info("Updating yt-dlp")
 	info, err := s.ytdlp.Update(ctx)
 	if err != nil {
-		log.FromCtx(ctx).Error("yt-dlp update failed", "error", err)
 		return info, err
 	}
 	log.FromCtx(ctx).Info("yt-dlp updated", "version", info.Version)
@@ -326,10 +335,13 @@ func (s *Service) UpdateYTDLP(ctx context.Context) (ytdlp.Info, error) {
 func (s *Service) Retry(ctx context.Context, id JobID) (JobID, error) {
 	job, err := s.repo.GetJob(ctx, id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("job not found: %w", fs.ErrNotExist)
+		}
 		return "", err
 	}
 	if job.Status.IsActive() {
-		return "", errors.New("job is still active")
+		return "", &InputError{Err: errors.New("job is still active")}
 	}
 	return s.Enqueue(ctx, EnqueueParams{
 		URL:          job.URL,
@@ -348,11 +360,11 @@ func (s *Service) Cookies(ctx context.Context) ([]string, error) {
 
 func (s *Service) SaveCookies(ctx context.Context, text string) error {
 	if len(text) > 1_000_000 {
-		return errors.New("cookie file exceeds 1 MB")
+		return &InputError{Err: errors.New("cookie file exceeds 1 MB")}
 	}
 	cookies, err := ParseCookiesTXT(text)
 	if err != nil {
-		return err
+		return &InputError{Err: err}
 	}
 	return s.repo.PutCookies(ctx, cookies)
 }
