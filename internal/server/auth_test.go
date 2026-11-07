@@ -201,6 +201,12 @@ func TestAuthentication(t *testing.T) {
 			status: http.StatusSeeOther,
 		},
 		{
+			name:   "login logo",
+			method: http.MethodGet,
+			path:   "/lemontube.svg",
+			status: http.StatusOK,
+		},
+		{
 			name:   "session",
 			method: http.MethodGet,
 			path:   "/api/session",

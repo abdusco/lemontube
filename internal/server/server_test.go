@@ -34,10 +34,11 @@ func newTestServerWithUsers(t *testing.T, users []AuthUser) http.Handler {
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
 	assets := fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte("LemonTube")},
-		"login.html": &fstest.MapFile{Data: []byte("Sign in")},
-		"styles.css": &fstest.MapFile{Data: []byte("body {}")},
-		"app.js":     &fstest.MapFile{Data: []byte("app")},
+		"index.html":    &fstest.MapFile{Data: []byte("LemonTube")},
+		"login.html":    &fstest.MapFile{Data: []byte("Sign in")},
+		"styles.css":    &fstest.MapFile{Data: []byte("body {}")},
+		"lemontube.svg": &fstest.MapFile{Data: []byte("<svg></svg>")},
+		"app.js":        &fstest.MapFile{Data: []byte("app")},
 	}
 	return New(assets, service, users)
 }

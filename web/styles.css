@@ -56,13 +56,14 @@ a { color: inherit; }
   .settings-menu { position-anchor: --settings-button; top: calc(anchor(bottom) + .5rem); right: anchor(right); }
 }
 .brand { display: inline-flex; align-items: center; gap: .6rem; text-decoration: none; font-size: 1.15rem; font-weight: 800; letter-spacing: -.055em; }
-.brand-mark { display: grid; place-items: center; width: 2.1rem; aspect-ratio: 1; border-radius: .7rem; background: var(--accent); color: var(--accent-ink); font-size: 1.55rem; line-height: 1; }
+.brand-mark { display: block; width: 2.5rem; height: 2.5rem; object-fit: contain; }
 .brand-accent { color: var(--muted); }
 main { max-width: 59rem; margin-inline: auto; padding-block: 2.5rem 4rem; }
 h1, h2, h3, p { margin-top: 0; }
 .card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .login-page { display: flex; flex-direction: column; justify-content: center; min-height: 100svh; max-width: 27rem; padding: 2rem 1rem; }
-.login-page > .brand { align-self: center; margin-bottom: 1.5rem; }
+.login-page > .brand { align-self: center; margin-bottom: 1.5rem; font-size: 2.5rem; }
+.login-page > .brand .brand-mark { width: 3.5rem; height: 3.5rem; }
 .login-card { display: grid; gap: 1rem; padding: 1.5rem; }
 .login-card > p { margin: 0; color: var(--muted); font-size: .85rem; }
 .login-card > .error { color: var(--danger); }

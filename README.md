@@ -1,6 +1,10 @@
+<img src="web/lemontube.svg" alt="" width="100">
+
 # LemonTube
 
 LemonTube is a personal download manager for videos, playlists, and audio. Add a link, choose the format and quality you want, and follow downloads in your browser.
+
+![LemonTube download manager](lemontube.png)
 
 ## Downloading
 
